@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BADGE_LABELS } from '../../game/storage'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
@@ -12,6 +13,26 @@ export function ProfileScreen({ game }: Props) {
   const craft = CRAFTS[profile.selectedCraft]
   const skin = SKINS[profile.selectedSkin]
   const points = scorePoints(profile.totalCashed)
+  const [notifHint, setNotifHint] = useState<string | null>(null)
+
+  const toggleNotif = async () => {
+    if (game.notifOn) {
+      game.disableNotifications()
+      setNotifHint('Bildirimler kapalı')
+    } else {
+      const ok = await game.enableNotifications()
+      setNotifHint(
+        ok
+          ? 'Bildirimler açık — seri riski ve görevler'
+          : game.notifPermission === 'denied'
+            ? 'İzin reddedildi — tarayıcı ayarlarından aç'
+            : game.notifPermission === 'unsupported'
+              ? 'Bu cihaz bildirim desteklemiyor'
+              : 'İzin verilmedi',
+      )
+    }
+    window.setTimeout(() => setNotifHint(null), 2800)
+  }
 
   return (
     <div className="relative z-20 flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
@@ -27,6 +48,27 @@ export function ProfileScreen({ game }: Props) {
           className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-white outline-none focus:border-signal/50"
         />
       </label>
+
+      <button
+        type="button"
+        onClick={toggleNotif}
+        className="mt-3 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-panel px-4 py-3 text-left backdrop-blur-md"
+      >
+        <div>
+          <p className="text-xs text-fog">Günlük bildirimler</p>
+          <p className="text-sm text-white">
+            Seri hatırlatma · görev tamam
+          </p>
+        </div>
+        <span
+          className={`font-display text-lg ${game.notifOn ? 'text-signal' : 'text-fog'}`}
+        >
+          {game.notifOn ? 'AÇIK' : 'KAPALI'}
+        </span>
+      </button>
+      {notifHint && (
+        <p className="mt-1 text-center text-xs text-ice">{notifHint}</p>
+      )}
 
       <button
         type="button"

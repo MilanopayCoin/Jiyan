@@ -1,18 +1,26 @@
 {
   "name": "Zincir: Drone",
   "short_name": "Zincir",
-  "description": "AR risk-ödül yükseliş oyunu",
+  "description": "AR risk-ödül yükseliş oyunu — kamera, yüksel, indir",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a1628",
   "theme_color": "#0a1628",
   "orientation": "portrait",
+  "lang": "tr",
+  "categories": ["games", "entertainment"],
   "icons": [
     {
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

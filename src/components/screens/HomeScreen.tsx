@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS, scorePoints } from '../../game/vehicles'
 import type { CraftId } from '../../game/types'
+import { InstallBanner } from '../InstallBanner'
 
 interface Props {
   game: GameApi
@@ -80,6 +81,8 @@ export function HomeScreen({ game }: Props) {
       <div className="flex-1" />
 
       <div className="px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+        <InstallBanner />
+
         {game.tipVisible && (
           <motion.button
             type="button"

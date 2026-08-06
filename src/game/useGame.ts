@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
-import { fmtX, getLayerInfo, getLedLevel, rollCrash } from './math'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { fmtX, getLayerInfo, getLedLevel, rollCrash, todayKey } from './math'
 import {
   BOMB_CREDIT_COST,
   applyFlightResult,
@@ -29,6 +29,24 @@ import {
   formatSkyBonus,
   type SkySample,
 } from '../utils/skyDetect'
+import {
+  consumeFriendFromUrl,
+  friendsToEntries,
+  getOrCreatePilotId,
+  loadFriends,
+  removeFriend as removeFriendStorage,
+  upsertFriend,
+  type FriendCard,
+} from './friends'
+import {
+  maybeStreakReminder,
+  notifyMissionComplete,
+  notifySafeLanding,
+  requestNotifPermission,
+  setNotifPref,
+  getNotifPref,
+  notifPermission,
+} from '../utils/notifications'
 
 interface GameState {
   screen: Screen
@@ -226,6 +244,8 @@ function reducer(state: GameState, action: Action): GameState {
 
 export function useGame() {
   const [state, dispatch] = useReducer(reducer, undefined, initialState)
+  const [friends, setFriends] = useState<FriendCard[]>(() => loadFriends())
+  const [notifOn, setNotifOn] = useState(() => getNotifPref())
   const consecutiveRef = useRef(state.consecutiveSafe)
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
@@ -234,6 +254,18 @@ export function useGame() {
   const bombUsedRef = useRef(false)
   const skyBonusRef = useRef(0)
   const skyActiveRef = useRef(false)
+
+  useEffect(() => {
+    getOrCreatePilotId()
+    const imported = consumeFriendFromUrl()
+    if (imported) setFriends(loadFriends())
+    void maybeStreakReminder({
+      streak: state.profile.streak,
+      lastFlightDate: state.profile.lastFlightDate,
+      today: todayKey(),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
+  }, [])
 
   useEffect(() => {
     consecutiveRef.current = state.consecutiveSafe
@@ -267,14 +299,50 @@ export function useGame() {
   }, [])
 
   const persistResult = useCallback((result: FlightResult) => {
+    const before = loadProfile()
     const { profile, consecutiveSafe } = applyFlightResult(
-      loadProfile(),
+      before,
       result,
       consecutiveRef.current,
     )
     consecutiveRef.current = consecutiveSafe
     dispatch({ type: 'SET_PROFILE', profile })
+
+    for (let i = 0; i < profile.missions.length; i++) {
+      const after = profile.missions[i]
+      const prev = before.missions[i]
+      if (after?.completed && prev && !prev.completed) {
+        void notifyMissionComplete(after.label)
+      }
+    }
+    if (result.outcome === 'cashed') {
+      void notifySafeLanding(fmtX(result.multiplier))
+    }
     return consecutiveSafe
+  }, [])
+
+  const addFriend = useCallback((card: FriendCard) => {
+    const me = getOrCreatePilotId()
+    if (card.id === me) return false
+    setFriends(upsertFriend(card, me))
+    return true
+  }, [])
+
+  const removeFriend = useCallback((id: string) => {
+    setFriends(removeFriendStorage(id))
+  }, [])
+
+  const enableNotifications = useCallback(async () => {
+    const perm = await requestNotifPermission()
+    const on = perm === 'granted'
+    setNotifPref(on)
+    setNotifOn(on)
+    return on
+  }, [])
+
+  const disableNotifications = useCallback(() => {
+    setNotifPref(false)
+    setNotifOn(false)
   }, [])
 
   const startFlight = useCallback(() => {
@@ -525,7 +593,19 @@ export function useGame() {
     return true
   }, [])
 
-  const leaderboard = buildLeaderboard(state.profile)
+  const friendEntries = friendsToEntries(friends)
+  const leaderboard = buildLeaderboard(state.profile, friendEntries)
+  const youEntry = {
+    id: 'you',
+    name: `${state.profile.displayName} (Sen)`,
+    bestMultiplier: state.profile.bestMultiplier || 0,
+    bestLayer: state.profile.bestLayer || 0,
+    streak: state.profile.streak,
+    isYou: true as const,
+  }
+  const friendsLeaderboard = [...friendEntries, youEntry].sort(
+    (a, b) => b.bestMultiplier - a.bestMultiplier,
+  )
   const activeCraft = CRAFTS[state.profile.selectedCraft]
   const nextLayer = getLayerInfo(
     Math.max(1, state.layer + 1),
@@ -548,7 +628,14 @@ export function useGame() {
     selectCraft,
     buyCraft,
     buySkin,
+    addFriend,
+    removeFriend,
+    enableNotifications,
+    disableNotifications,
+    notifOn,
+    notifPermission: notifPermission(),
     leaderboard,
+    friendsLeaderboard,
     fmtX,
     formatSkyBonus,
     activeCraft,

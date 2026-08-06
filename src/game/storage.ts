@@ -406,7 +406,10 @@ export function selectLoadout(
   return next
 }
 
-export function buildLeaderboard(profile: PlayerProfile): LeaderboardEntry[] {
+export function buildLeaderboard(
+  profile: PlayerProfile,
+  friends: LeaderboardEntry[] = [],
+): LeaderboardEntry[] {
   const bots: LeaderboardEntry[] = [
     'Ahmet',
     'Elif',
@@ -440,7 +443,11 @@ export function buildLeaderboard(profile: PlayerProfile): LeaderboardEntry[] {
     isYou: true,
   }
 
-  return [...bots, you].sort((a, b) => b.bestMultiplier - a.bestMultiplier)
+  // Friends also appear on global (deduped by id)
+  const friendIds = new Set(friends.map((f) => f.id))
+  const extra = friends.filter((f) => f.id !== 'you')
+  const merged = [...bots.filter((b) => !friendIds.has(b.id)), ...extra, you]
+  return merged.sort((a, b) => b.bestMultiplier - a.bestMultiplier)
 }
 
 export const BADGE_LABELS: Record<string, string> = {
