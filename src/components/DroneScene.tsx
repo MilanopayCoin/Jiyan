@@ -337,10 +337,12 @@ export function DroneScene({
       antialias: true,
       alpha: true,
       powerPreference: 'high-performance',
+      preserveDrawingBuffer: true,
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(mount.clientWidth, mount.clientHeight)
     renderer.setClearColor(0x000000, 0)
+    renderer.domElement.setAttribute('data-share-gl', '1')
     mount.appendChild(renderer.domElement)
 
     const hemi = new THREE.HemisphereLight(0xb8d4f0, 0x1a2332, 1.1)
@@ -447,7 +449,8 @@ export function DroneScene({
       } else if (P === 'climbing' || P === 'done') {
         targetScale = Math.max(0.18, 1 - L * 0.09 * Math.min(visual, 1.3))
         targetY = 0.15 + L * 0.22 * visual
-        windAmp = Math.min(0.08, L * 0.012)
+        // Altitude wind grows with layer — stronger sway / turbulence
+        windAmp = Math.min(0.22, L * 0.028 + (ledLevel === 'critical' ? 0.04 : 0))
       }
 
       if (P === 'crashing') {
@@ -473,10 +476,17 @@ export function DroneScene({
       } else {
         crashT = 0
         landT = 0
-        bobPhase += 0.035 * (cid === 'balloon' ? 0.7 : 1)
-        craft.group.rotation.z = Math.sin(bobPhase) * (0.04 + windAmp)
-        craft.group.rotation.x = Math.cos(bobPhase * 0.7) * 0.03
-        craft.group.position.x = Math.sin(bobPhase * 0.5) * windAmp * 2
+        const windSpeed = 0.035 + windAmp * 0.6
+        bobPhase += windSpeed * (cid === 'balloon' ? 0.7 : 1)
+        const gust = Math.sin(bobPhase * 2.3) * windAmp * 0.5
+        craft.group.rotation.z =
+          Math.sin(bobPhase) * (0.04 + windAmp) + gust * 0.4
+        craft.group.rotation.x =
+          Math.cos(bobPhase * 0.7) * (0.03 + windAmp * 0.35)
+        craft.group.position.x =
+          Math.sin(bobPhase * 0.5) * windAmp * 3.2 +
+          Math.sin(bobPhase * 3.1) * windAmp * 0.8
+        craft.group.position.z = Math.cos(bobPhase * 1.1) * windAmp * 0.6
         ;(shadow.material as THREE.MeshBasicMaterial).opacity =
           0.12 + currentScale * 0.16
       }
@@ -515,6 +525,7 @@ export function DroneScene({
   return (
     <div
       ref={mountRef}
+      data-drone-canvas
       className={`pointer-events-none absolute inset-0 ${className}`}
       aria-hidden
     />

@@ -88,6 +88,69 @@ body {
   }
 }
 
+@keyframes wind-light-sway {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-2px, 1px) rotate(-0.15deg);
+  }
+  75% {
+    transform: translate(3px, -1px) rotate(0.2deg);
+  }
+}
+
+@keyframes wind-mid-sway {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate(-4px, 2px) rotate(-0.35deg);
+  }
+  50% {
+    transform: translate(3px, -3px) rotate(0.3deg);
+  }
+  80% {
+    transform: translate(-2px, 2px) rotate(-0.2deg);
+  }
+}
+
+@keyframes wind-heavy-sway {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  15% {
+    transform: translate(-6px, 3px) rotate(-0.5deg);
+  }
+  40% {
+    transform: translate(7px, -4px) rotate(0.55deg);
+  }
+  65% {
+    transform: translate(-5px, -2px) rotate(-0.4deg);
+  }
+  85% {
+    transform: translate(4px, 4px) rotate(0.25deg);
+  }
+}
+
+@keyframes wind-gust-pulse {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-5px, 2px) rotate(-0.4deg);
+  }
+  55% {
+    transform: translate(6px, -3px) rotate(0.45deg);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
 @keyframes pulse-glow {
   0%,
   100% {
@@ -100,6 +163,22 @@ body {
 
 .shake {
   animation: screen-shake 0.45s ease-in-out;
+}
+
+.wind-gust {
+  animation: wind-gust-pulse 0.28s ease-out;
+}
+
+.wind-light {
+  animation: wind-light-sway 2.4s ease-in-out infinite;
+}
+
+.wind-mid {
+  animation: wind-mid-sway 1.8s ease-in-out infinite;
+}
+
+.wind-heavy {
+  animation: wind-heavy-sway 1.2s ease-in-out infinite;
 }
 
 .flash-danger {

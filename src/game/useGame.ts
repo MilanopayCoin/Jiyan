@@ -23,6 +23,7 @@ import type {
 } from './types'
 import { CRAFTS } from './vehicles'
 import { haptic } from '../utils/haptics'
+import { sfx } from '../utils/audio'
 import {
   applySkyBonus,
   formatSkyBonus,
@@ -38,6 +39,7 @@ interface GameState {
   baseMultiplier: number
   led: LedLevel
   shaking: boolean
+  windShake: boolean
   flash: boolean
   result: FlightResult | null
   consecutiveSafe: number
@@ -65,6 +67,8 @@ type Action =
   | { type: 'CASH_OUT'; result: FlightResult }
   | { type: 'SET_PHASE'; phase: FlightPhase }
   | { type: 'SHAKE_OFF' }
+  | { type: 'WIND_SHAKE_ON' }
+  | { type: 'WIND_SHAKE_OFF' }
   | { type: 'FLASH_OFF' }
   | { type: 'HIDE_TIP' }
   | { type: 'RESET_TO_HOME' }
@@ -86,6 +90,7 @@ function initialState(): GameState {
     baseMultiplier: 1,
     led: 'safe',
     shaking: false,
+    windShake: false,
     flash: false,
     result: null,
     consecutiveSafe: 0,
@@ -128,6 +133,7 @@ function reducer(state: GameState, action: Action): GameState {
         baseMultiplier: 1,
         led: 'safe',
         shaking: false,
+        windShake: false,
         flash: false,
         result: null,
         bombArmed: false,
@@ -151,6 +157,7 @@ function reducer(state: GameState, action: Action): GameState {
         ...state,
         phase: 'crashing',
         shaking: true,
+        windShake: false,
         flash: true,
         result: action.result,
         led: 'critical',
@@ -160,6 +167,7 @@ function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         phase: 'landing',
+        windShake: false,
         result: action.result,
         bombArmed: false,
       }
@@ -167,6 +175,10 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, phase: action.phase }
     case 'SHAKE_OFF':
       return { ...state, shaking: false }
+    case 'WIND_SHAKE_ON':
+      return { ...state, windShake: true }
+    case 'WIND_SHAKE_OFF':
+      return { ...state, windShake: false }
     case 'FLASH_OFF':
       return { ...state, flash: false }
     case 'HIDE_TIP':
@@ -181,6 +193,7 @@ function reducer(state: GameState, action: Action): GameState {
         baseMultiplier: 1,
         led: 'safe',
         shaking: false,
+        windShake: false,
         flash: false,
         result: null,
         bombArmed: false,
@@ -247,7 +260,10 @@ export function useGame() {
   const setSkySample = useCallback((sample: SkySample) => {
     const wasActive = skyActiveRef.current
     dispatch({ type: 'SET_SKY', sample })
-    if (!wasActive && sample.active) haptic.warn()
+    if (!wasActive && sample.active) {
+      haptic.warn()
+      sfx.warn()
+    }
   }, [])
 
   const persistResult = useCallback((result: FlightResult) => {
@@ -275,10 +291,13 @@ export function useGame() {
     saveProfile(spent)
     dispatch({ type: 'SET_PROFILE', profile: spent })
 
+    void sfx.unlock()
     haptic.tap(craftId)
+    sfx.climb(craftId)
     dispatch({ type: 'START_FLIGHT' })
     bombArmedRef.current = false
     bombUsedRef.current = false
+    sfx.startProp(craftId)
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
 
@@ -298,6 +317,7 @@ export function useGame() {
           skyBonus: skyB,
         }
         haptic.crash(craftId)
+        sfx.crash(craftId)
         dispatch({ type: 'CRASH', result })
         persistResult(result)
         window.setTimeout(() => {
@@ -308,6 +328,7 @@ export function useGame() {
         }, 900)
       } else {
         haptic.climb(craftId)
+        sfx.setPropLayer(1, craftId)
         dispatch({
           type: 'CLIMB_SUCCESS',
           layer: 1,
@@ -337,6 +358,7 @@ export function useGame() {
     bombArmedRef.current = true
     bombUsedRef.current = true
     haptic.bomb()
+    sfx.bomb()
     window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
     return true
   }, [state.phase, state.layer, state.bombArmed])
@@ -349,7 +371,9 @@ export function useGame() {
     const skinId = skinRef.current
     const shielded = bombArmedRef.current
     const skyB = skyBonusRef.current
+    void sfx.unlock()
     haptic.climb(craftId)
+    sfx.climb(craftId)
 
     const nextLayer = state.layer + 1
     const delay = Math.round(350 / CRAFTS[craftId].climbVisual)
@@ -357,6 +381,12 @@ export function useGame() {
     if (shielded) {
       dispatch({ type: 'CONSUME_SHIELD' })
       bombArmedRef.current = false
+    }
+
+    // Brief climb gust on screen
+    if (nextLayer >= 2) {
+      dispatch({ type: 'WIND_SHAKE_ON' })
+      window.setTimeout(() => dispatch({ type: 'WIND_SHAKE_OFF' }), 280)
     }
 
     window.setTimeout(() => {
@@ -374,6 +404,7 @@ export function useGame() {
           skyBonus: skyB,
         }
         haptic.crash(craftId)
+        sfx.crash(craftId)
         dispatch({ type: 'CRASH', result })
         persistResult(result)
         window.setTimeout(() => {
@@ -384,6 +415,9 @@ export function useGame() {
           animatingRef.current = false
         }, 1000)
       } else {
+        sfx.setPropLayer(nextLayer, craftId)
+        const led = getLedLevel(nextLayer, craftId)
+        sfx.setStatic(led === 'critical' ? 0.85 : led === 'caution' ? 0.4 : 0.1)
         dispatch({
           type: 'CLIMB_SUCCESS',
           layer: nextLayer,
@@ -403,6 +437,7 @@ export function useGame() {
     const skinId = skinRef.current
     const skyB = skyBonusRef.current
     haptic.land(craftId)
+    sfx.land(craftId)
     const near = getLayerInfo(state.layer + 1, craftId)
     const result: FlightResult = {
       outcome: 'cashed',
@@ -426,11 +461,14 @@ export function useGame() {
 
   const goHome = useCallback(() => {
     haptic.tap(craftRef.current)
+    sfx.stopProp()
+    sfx.stopStatic()
     dispatch({ type: 'RESET_TO_HOME' })
   }, [])
 
   const setScreen = useCallback((screen: Screen) => {
     haptic.tap(craftRef.current)
+    void sfx.unlock()
     dispatch({ type: 'SET_SCREEN', screen })
   }, [])
 

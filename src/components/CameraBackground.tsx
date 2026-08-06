@@ -118,6 +118,7 @@ export function CameraBackground({
         playsInline
         muted
         autoPlay
+        data-share-video
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
           status === 'active' ? 'opacity-100' : 'opacity-0'
         }`}

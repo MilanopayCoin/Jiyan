@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS } from '../../game/vehicles'
+import { shareResultCard } from '../../utils/shareCard'
+import { sfx } from '../../utils/audio'
 
 interface Props {
   game: GameApi
@@ -9,6 +12,8 @@ interface Props {
 
 export function ResultScreen({ game }: Props) {
   const result = game.result
+  const [shareHint, setShareHint] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
   if (!result) return null
 
   const won = result.outcome === 'cashed'
@@ -17,22 +22,22 @@ export function ResultScreen({ game }: Props) {
   const rare = skin.rarity !== 'common'
 
   const share = async () => {
-    const craftBit = rare ? `${craft.name} (${skin.name})` : craft.name
-    const sky =
-      result.skyBonus && result.skyBonus > 0
-        ? ` gökyüzü +${Math.round(result.skyBonus * 100)}%`
-        : ''
-    const text = won
-      ? `Zincir: Drone — ${craftBit} ile ${fmtX(result.multiplier)} indirdim!${sky}`
-      : `Zincir: Drone — ${craftBit} ile ${fmtX(result.nearMissMultiplier)}'e az kaldı!${sky}`
+    if (sharing) return
+    setSharing(true)
+    setShareHint(null)
+    void sfx.unlock()
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Zincir: Drone', text, url: location.href })
-      } else {
-        await navigator.clipboard.writeText(text)
+      const mode = await shareResultCard(result)
+      if (mode === 'download') {
+        setShareHint('Kart indirildi · metin kopyalandı')
+      } else if (mode === 'copied') {
+        setShareHint('Metin kopyalandı')
       }
     } catch {
-      // user cancelled
+      setShareHint('Paylaşım başarısız')
+    } finally {
+      setSharing(false)
+      window.setTimeout(() => setShareHint(null), 2800)
     }
   }
 
@@ -106,9 +111,10 @@ export function ResultScreen({ game }: Props) {
           <button
             type="button"
             onClick={share}
-            className="rounded-xl border border-white/15 bg-white/5 py-3.5 text-sm font-medium text-white"
+            disabled={sharing}
+            className="rounded-xl border border-white/15 bg-white/5 py-3.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            Paylaş
+            {sharing ? 'Hazırlanıyor…' : 'Paylaş'}
           </button>
           <button
             type="button"
@@ -124,6 +130,9 @@ export function ResultScreen({ game }: Props) {
             Tekrar uç
           </button>
         </div>
+        {shareHint && (
+          <p className="px-4 pb-3 text-center text-xs text-fog">{shareHint}</p>
+        )}
       </motion.div>
 
       <button

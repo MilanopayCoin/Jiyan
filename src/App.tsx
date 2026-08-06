@@ -9,6 +9,15 @@ import { ProfileScreen } from './components/screens/ProfileScreen'
 import { HangarScreen } from './components/screens/HangarScreen'
 import { useGame } from './game/useGame'
 
+function windClass(layer: number, windShake: boolean, shaking: boolean): string {
+  if (shaking) return 'shake'
+  if (windShake) return 'wind-gust'
+  if (layer >= 6) return 'wind-heavy'
+  if (layer >= 4) return 'wind-mid'
+  if (layer >= 2) return 'wind-light'
+  return ''
+}
+
 export default function App() {
   const game = useGame()
   const showCraft =
@@ -16,11 +25,16 @@ export default function App() {
     game.screen === 'flight' ||
     game.screen === 'result'
 
+  const inFlight = game.screen === 'flight' && game.phase === 'climbing'
+  const layerForWind = inFlight ? game.layer : 0
+
   return (
     <div
-      className={`relative h-full w-full overflow-hidden ${
-        game.shaking ? 'shake' : ''
-      }`}
+      className={`relative h-full w-full overflow-hidden ${windClass(
+        layerForWind,
+        game.windShake,
+        game.shaking,
+      )}`}
     >
       <CameraBackground
         showHint={game.screen === 'home' || game.screen === 'flight'}
