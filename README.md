@@ -13,6 +13,15 @@ npm run dev
 
 Arka kamera izni ister (`facingMode: environment`). İzin yoksa gökyüzü fallback kullanılır.
 
+## Netlify
+
+`netlify.toml` ayarları:
+- **Build command:** `npm run build`
+- **Publish directory:** `dist`
+- Site `main` branch'inden yayınlanmalı
+
+Canlı: https://chaindrone.netlify.app
+
 ## Stack
 
 - React + TypeScript + Vite
