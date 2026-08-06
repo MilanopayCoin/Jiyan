@@ -95,8 +95,7 @@ describe('flight result persistence', () => {
 })
 
 describe('signal bomb', () => {
-  it('buyBomb spends credits and adds inventory', async () => {
-    const { buyBomb } = await import('./storage')
+  it('buyBomb spends credits and adds inventory', () => {
     const profile = { ...defaultProfile(), flightCredits: 6, bombs: 1 }
     const res = buyBomb(profile)
     expect(res.ok).toBe(true)
