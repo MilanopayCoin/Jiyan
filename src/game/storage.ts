@@ -460,4 +460,7 @@ export const BADGE_LABELS: Record<string, string> = {
   'arac-rocket': 'Roket Açıldı',
   'sinyal-bombasi': 'Sinyal Bombası',
   'gokyuzu-pilotu': 'Gökyüzü Pilotu',
+  'messi-ayak': 'Messi Ayak',
+  'last-touch-king': 'Last Touch King',
+  'hattrick-pilot': 'Hat-trick Pilot',
 }

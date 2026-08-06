@@ -5,6 +5,8 @@ export type Screen =
   | 'leaderboard'
   | 'profile'
   | 'hangar'
+  | 'modes'
+  | 'vr-play'
 
 export type FlightPhase = 'idle' | 'climbing' | 'landing' | 'crashing' | 'done'
 

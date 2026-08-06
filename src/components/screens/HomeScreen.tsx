@@ -65,6 +65,14 @@ export function HomeScreen({ game }: Props) {
 
         <button
           type="button"
+          onClick={() => game.setScreen('modes')}
+          className="mx-auto mt-2 flex items-center gap-2 rounded-full border border-ice/25 bg-ice/10 px-4 py-2 backdrop-blur-sm"
+        >
+          <span className="text-sm text-ice">VR Modlar · Messi arena →</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => game.setScreen('hangar')}
           className="mx-auto mt-3 flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur-sm"
         >

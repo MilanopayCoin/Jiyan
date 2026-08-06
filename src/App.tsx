@@ -7,14 +7,20 @@ import { ResultScreen } from './components/screens/ResultScreen'
 import { LeaderboardScreen } from './components/screens/LeaderboardScreen'
 import { ProfileScreen } from './components/screens/ProfileScreen'
 import { HangarScreen } from './components/screens/HangarScreen'
+import { ModesScreen } from './components/screens/ModesScreen'
+import { VrPlayScreen } from './components/screens/VrPlayScreen'
 import { useGame } from './game/useGame'
+import { useVrMode } from './game/useVrMode'
 
 export default function App() {
   const game = useGame()
+  const vr = useVrMode()
   const showCraft =
     game.screen === 'home' ||
     game.screen === 'flight' ||
     game.screen === 'result'
+  const showCamera =
+    game.screen !== 'modes' && game.screen !== 'vr-play'
 
   return (
     <div
@@ -22,10 +28,22 @@ export default function App() {
         game.shaking ? 'shake' : ''
       }`}
     >
-      <CameraBackground
-        showHint={game.screen === 'home' || game.screen === 'flight'}
-        onSkySample={game.setSkySample}
-      />
+      {showCamera && (
+        <CameraBackground
+          showHint={game.screen === 'home' || game.screen === 'flight'}
+          onSkySample={game.setSkySample}
+        />
+      )}
+
+      {!showCamera && game.screen === 'modes' && (
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(ellipse 120% 80% at 50% 100%, #0d3d2a 0%, #0a1628 50%, #03080e 100%)',
+          }}
+        />
+      )}
 
       {showCraft && (
         <DroneScene
@@ -67,6 +85,8 @@ export default function App() {
       {game.screen === 'leaderboard' && <LeaderboardScreen game={game} />}
       {game.screen === 'profile' && <ProfileScreen game={game} />}
       {game.screen === 'hangar' && <HangarScreen game={game} />}
+      {game.screen === 'modes' && <ModesScreen vr={vr} game={game} />}
+      {game.screen === 'vr-play' && <VrPlayScreen vr={vr} game={game} />}
 
       <BottomNav screen={game.screen} onNavigate={game.setScreen} />
     </div>
