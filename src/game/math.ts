@@ -32,10 +32,11 @@ export function rollCrash(
   layer: number,
   craftId: CraftId = 'drone',
   shielded = false,
+  rng: () => number = Math.random,
 ): boolean {
   if (shielded) return false
   const { crashChance } = getLayerInfo(layer, craftId)
-  return Math.random() < crashChance
+  return rng() < crashChance
 }
 
 export function getLedLevel(

@@ -14,14 +14,25 @@ interface Props {
   game: GameApi
 }
 
+type Tab = 'global' | 'friends' | 'daily'
+
 export function LeaderboardScreen({ game }: Props) {
-  const [tab, setTab] = useState<'global' | 'friends'>('global')
+  const [tab, setTab] = useState<Tab>('global')
   const [codeInput, setCodeInput] = useState('')
   const [hint, setHint] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const list =
-    tab === 'global' ? game.leaderboard : game.friendsLeaderboard
+    tab === 'global'
+      ? game.leaderboard
+      : tab === 'friends'
+        ? game.friendsLeaderboard
+        : game.dailyLeaderboard
+
+  useEffect(() => {
+    void game.refreshSync()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh once on mount
+  }, [])
 
   const shareInvite = async () => {
     setBusy(true)
@@ -57,33 +68,50 @@ export function LeaderboardScreen({ game }: Props) {
       return
     }
     const ok = game.addFriend(card)
-    setHint(ok ? `${card.name} eklendi` : 'Kendini ekleyemezsin')
+    setHint(ok ? `${card.name} eklendi · sync…` : 'Kendini ekleyemezsin')
     setCodeInput('')
+    if (ok) void game.refreshSync()
     window.setTimeout(() => setHint(null), 2200)
   }
 
-  useEffect(() => {
-    setHint(null)
-  }, [tab])
-
   return (
     <div className="relative z-20 flex h-full flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
-      <h1 className="font-display text-4xl text-white">Sıralama</h1>
-      <p className="mt-1 text-sm text-fog">En yüksek irtifa · günlük seri</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="font-display text-4xl text-white">Sıralama</h1>
+          <p className="mt-1 text-sm text-fog">Sync + günlük challenge</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void game.refreshSync().then(() => {
+              setHint('Senkronize')
+              window.setTimeout(() => setHint(null), 1600)
+            })
+          }}
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-ice"
+        >
+          Yenile
+        </button>
+      </div>
 
-      <div className="mt-4 flex gap-2">
-        {(['global', 'friends'] as const).map((t) => (
+      <div className="mt-4 flex flex-wrap gap-2">
+        {(
+          [
+            ['global', 'Global'],
+            ['friends', 'Arkadaşlar'],
+            ['daily', 'Günlük'],
+          ] as const
+        ).map(([t, label]) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              tab === t
-                ? 'bg-signal/20 text-signal'
-                : 'bg-white/5 text-fog'
+              tab === t ? 'bg-signal/20 text-signal' : 'bg-white/5 text-fog'
             }`}
           >
-            {t === 'global' ? 'Global' : 'Arkadaşlar'}
+            {label}
           </button>
         ))}
       </div>
@@ -91,8 +119,7 @@ export function LeaderboardScreen({ game }: Props) {
       {tab === 'friends' && (
         <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-panel p-3 backdrop-blur-md">
           <p className="text-xs text-fog">
-            Davet linki veya ZD1 kodu ile gerçek arkadaş ekle — skorlar cihazında
-            saklanır.
+            Davet et; skorlar Neon üzerinden senkronize edilir.
           </p>
           <div className="flex gap-2">
             <button
@@ -118,14 +145,39 @@ export function LeaderboardScreen({ game }: Props) {
             placeholder="Link veya ZD1.…"
             className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white outline-none placeholder:text-fog/60 focus:border-ice/40"
           />
-          {hint && <p className="text-center text-xs text-ice">{hint}</p>}
         </div>
+      )}
+
+      {tab === 'daily' && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-amber/25 bg-amber/10 px-3 py-2.5">
+          <p className="text-xs text-amber">
+            Bugünün seed&apos;i herkes için aynı
+          </p>
+          <button
+            type="button"
+            onClick={() => game.shareDaily()}
+            className="text-xs font-medium text-white underline-offset-2 hover:underline"
+          >
+            Skorunu paylaş
+          </button>
+        </div>
+      )}
+
+      {(hint || game.syncHint) && (
+        <p className="mt-2 text-center text-xs text-ice">
+          {hint || game.syncHint}
+        </p>
       )}
 
       <div className="mt-4 flex-1 space-y-2 overflow-y-auto">
         {tab === 'friends' && list.length <= 1 && (
           <p className="py-8 text-center text-sm text-fog">
             Henüz arkadaş yok. Davet gönder veya bir kod yapıştır.
+          </p>
+        )}
+        {tab === 'daily' && list.every((e) => !e.bestMultiplier) && (
+          <p className="py-6 text-center text-sm text-fog">
+            Bugün henüz challenge inişi yok — ana ekrandan dene.
           </p>
         )}
         {list.map((entry, i) => (

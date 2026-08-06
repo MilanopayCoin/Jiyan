@@ -20,6 +20,11 @@ export function FlightScreen({ game }: Props) {
   return (
     <div className="relative z-20 flex h-full flex-col">
       <header className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        {game.challengeMode && (
+          <p className="mb-2 text-center font-display text-sm tracking-[0.25em] text-amber">
+            GÜNLÜK CHALLENGE · bomba/gökyüzü kapalı
+          </p>
+        )}
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-fog">İrtifa</p>
@@ -99,24 +104,26 @@ export function FlightScreen({ game }: Props) {
           {game.skyActive ? ` · gökyüzü ${skyLabel}` : ''}
         </p>
 
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          disabled={!canAct || game.bombArmed || (game.profile.bombs ?? 0) <= 0}
-          onClick={() => game.armBomb()}
-          className="mb-3 w-full rounded-2xl border border-amber/40 bg-amber/15 py-3.5 backdrop-blur-md disabled:opacity-35"
-        >
-          <span className="font-display text-2xl tracking-wide text-amber">
-            SİNYAL BOMBASI
-          </span>
-          <span className="mt-0.5 block text-xs text-fog">
-            {game.bombArmed
-              ? 'Kalkan hazır'
-              : (game.profile.bombs ?? 0) > 0
-                ? `Stok ${game.profile.bombs} · sonraki yükselişi koru`
-                : 'Stok yok — hangardan al'}
-          </span>
-        </motion.button>
+        {!game.challengeMode && (
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.97 }}
+            disabled={!canAct || game.bombArmed || (game.profile.bombs ?? 0) <= 0}
+            onClick={() => game.armBomb()}
+            className="mb-3 w-full rounded-2xl border border-amber/40 bg-amber/15 py-3.5 backdrop-blur-md disabled:opacity-35"
+          >
+            <span className="font-display text-2xl tracking-wide text-amber">
+              SİNYAL BOMBASI
+            </span>
+            <span className="mt-0.5 block text-xs text-fog">
+              {game.bombArmed
+                ? 'Kalkan hazır'
+                : (game.profile.bombs ?? 0) > 0
+                  ? `Stok ${game.profile.bombs} · sonraki yükselişi koru`
+                  : 'Stok yok — hangardan al'}
+            </span>
+          </motion.button>
+        )}
 
         <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
           <motion.button

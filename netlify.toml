@@ -4,10 +4,20 @@
 [build]
   command = "npm ci && npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-fund --no-audit"
+  # Claimable Neon DB (72h unless claimed). Claim: https://neon.new/claim/019fd967-b410-769a-9dc7-562b5815504e
+  # After claiming, move DATABASE_URL to Netlify site env vars and remove from here.
+  DATABASE_URL = "postgresql://neondb_owner:npg_hcf8CVwq7dLs@ep-damp-cell-axqlfdo7-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+# API → Netlify Functions (must be before SPA fallback)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
 # SPA fallback
 [[redirects]]

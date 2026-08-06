@@ -8,6 +8,7 @@ import { LeaderboardScreen } from './components/screens/LeaderboardScreen'
 import { ProfileScreen } from './components/screens/ProfileScreen'
 import { HangarScreen } from './components/screens/HangarScreen'
 import { useGame } from './game/useGame'
+import { useTilt } from './utils/tilt'
 
 function windClass(layer: number, windShake: boolean, shaking: boolean): string {
   if (shaking) return 'shake'
@@ -24,6 +25,10 @@ export default function App() {
     game.screen === 'home' ||
     game.screen === 'flight' ||
     game.screen === 'result'
+
+  const tiltEnabled =
+    game.screen === 'flight' || game.screen === 'home' || game.screen === 'result'
+  const tilt = useTilt(tiltEnabled)
 
   const inFlight = game.screen === 'flight' && game.phase === 'climbing'
   const layerForWind = inFlight ? game.layer : 0
@@ -58,6 +63,8 @@ export default function App() {
           led={game.screen === 'home' ? 'safe' : game.led}
           craftId={game.profile.selectedCraft}
           skinId={game.profile.selectedSkin}
+          tiltX={tilt.allowed ? tilt.x : 0}
+          tiltY={tilt.allowed ? tilt.y : 0}
         />
       )}
 

@@ -9,6 +9,9 @@ interface Props {
   led: LedLevel
   craftId: CraftId
   skinId: CraftSkinId
+  /** Device tilt -1..1 */
+  tiltX?: number
+  tiltY?: number
   className?: string
 }
 
@@ -313,11 +316,13 @@ export function DroneScene({
   led,
   craftId,
   skinId,
+  tiltX = 0,
+  tiltY = 0,
   className = '',
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
-  const stateRef = useRef({ layer, phase, led, craftId, skinId })
-  stateRef.current = { layer, phase, led, craftId, skinId }
+  const stateRef = useRef({ layer, phase, led, craftId, skinId, tiltX, tiltY })
+  stateRef.current = { layer, phase, led, craftId, skinId, tiltX, tiltY }
 
   useEffect(() => {
     const mount = mountRef.current
@@ -421,6 +426,8 @@ export function DroneScene({
         led: ledLevel,
         craftId: cid,
         skinId: sid,
+        tiltX: tx,
+        tiltY: ty,
       } = stateRef.current
 
       if (`${cid}:${sid}` !== currentKey) swapCraft(cid, sid)
@@ -453,6 +460,8 @@ export function DroneScene({
         windAmp = Math.min(0.22, L * 0.028 + (ledLevel === 'critical' ? 0.04 : 0))
       }
 
+      const tiltAmp = P === 'climbing' || P === 'idle' ? 1 : 0.35
+
       if (P === 'crashing') {
         crashT += 0.04
         craft.group.rotation.z = Math.sin(crashT * 8) * 0.45
@@ -470,23 +479,39 @@ export function DroneScene({
         landT += 0.05
         targetY = 0.15
         targetScale = 1
-        craft.group.rotation.z = Math.sin(landT * 3) * 0.05
-        craft.group.rotation.x = 0
-        craft.group.position.x = THREE.MathUtils.lerp(craft.group.position.x, 0, 0.1)
+        craft.group.rotation.z = THREE.MathUtils.lerp(
+          craft.group.rotation.z,
+          tx * 0.15,
+          0.08,
+        )
+        craft.group.rotation.x = THREE.MathUtils.lerp(
+          craft.group.rotation.x,
+          ty * 0.1,
+          0.08,
+        )
+        craft.group.position.x = THREE.MathUtils.lerp(
+          craft.group.position.x,
+          tx * 0.25,
+          0.1,
+        )
       } else {
         crashT = 0
         landT = 0
         const windSpeed = 0.035 + windAmp * 0.6
         bobPhase += windSpeed * (cid === 'balloon' ? 0.7 : 1)
         const gust = Math.sin(bobPhase * 2.3) * windAmp * 0.5
+        const tiltRoll = tx * 0.35 * tiltAmp
+        const tiltPitch = ty * 0.28 * tiltAmp
         craft.group.rotation.z =
-          Math.sin(bobPhase) * (0.04 + windAmp) + gust * 0.4
+          Math.sin(bobPhase) * (0.04 + windAmp) + gust * 0.4 + tiltRoll
         craft.group.rotation.x =
-          Math.cos(bobPhase * 0.7) * (0.03 + windAmp * 0.35)
+          Math.cos(bobPhase * 0.7) * (0.03 + windAmp * 0.35) + tiltPitch
         craft.group.position.x =
           Math.sin(bobPhase * 0.5) * windAmp * 3.2 +
-          Math.sin(bobPhase * 3.1) * windAmp * 0.8
-        craft.group.position.z = Math.cos(bobPhase * 1.1) * windAmp * 0.6
+          Math.sin(bobPhase * 3.1) * windAmp * 0.8 +
+          tx * 0.55 * tiltAmp
+        craft.group.position.z =
+          Math.cos(bobPhase * 1.1) * windAmp * 0.6 - ty * 0.25 * tiltAmp
         ;(shadow.material as THREE.MeshBasicMaterial).opacity =
           0.12 + currentScale * 0.16
       }

@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { fmtX, getLayerInfo, getLedLevel, rollCrash, todayKey } from './math'
 import {
+  createRng,
+  dailyChallengeSeed,
+  loadDailyBest,
+  updateDailyBestFromFlight,
+  type DailyBest,
+} from './challenge'
+import {
+  fetchDailyRemote,
+  fetchFriendsRemote,
+  fetchTopRemote,
+  pushScore,
+} from '../utils/syncApi'
+import { requestTiltPermission } from '../utils/tilt'
+import {
   BOMB_CREDIT_COST,
   applyFlightResult,
   buildLeaderboard,
@@ -69,12 +83,13 @@ interface GameState {
   skyScore: number
   skyBonus: number
   skyActive: boolean
+  challengeMode: boolean
 }
 
 type Action =
   | { type: 'SET_SCREEN'; screen: Screen }
   | { type: 'SET_PROFILE'; profile: PlayerProfile }
-  | { type: 'START_FLIGHT' }
+  | { type: 'START_FLIGHT'; challenge: boolean }
   | {
       type: 'CLIMB_SUCCESS'
       layer: number
@@ -120,6 +135,7 @@ function initialState(): GameState {
     skyScore: 0,
     skyBonus: 0,
     skyActive: false,
+    challengeMode: false,
   }
 }
 
@@ -133,10 +149,14 @@ function reducer(state: GameState, action: Action): GameState {
       const next = {
         ...state,
         skyScore: action.sample.score,
-        skyBonus: action.sample.bonus,
-        skyActive: action.sample.active,
+        skyBonus: state.challengeMode ? 0 : action.sample.bonus,
+        skyActive: state.challengeMode ? false : action.sample.active,
       }
-      if (state.phase === 'climbing' && state.layer >= 1) {
+      if (
+        !state.challengeMode &&
+        state.phase === 'climbing' &&
+        state.layer >= 1
+      ) {
         next.multiplier = applySkyBonus(state.baseMultiplier, action.sample.bonus)
       }
       return next
@@ -157,10 +177,14 @@ function reducer(state: GameState, action: Action): GameState {
         bombArmed: false,
         bombUsedThisFlight: false,
         shieldFlash: false,
+        challengeMode: action.challenge,
+        skyBonus: action.challenge ? 0 : state.skyBonus,
+        skyActive: action.challenge ? false : state.skyActive,
       }
     case 'CLIMB_SUCCESS': {
       const info = getLayerInfo(action.layer, action.craftId)
-      const boosted = applySkyBonus(info.multiplier, action.skyBonus)
+      const sky = state.challengeMode ? 0 : action.skyBonus
+      const boosted = applySkyBonus(info.multiplier, sky)
       return {
         ...state,
         phase: 'climbing',
@@ -217,6 +241,7 @@ function reducer(state: GameState, action: Action): GameState {
         bombArmed: false,
         bombUsedThisFlight: false,
         shieldFlash: false,
+        challengeMode: false,
       }
     case 'RENAME': {
       const profile = { ...state.profile, displayName: action.name }
@@ -246,6 +271,10 @@ export function useGame() {
   const [state, dispatch] = useReducer(reducer, undefined, initialState)
   const [friends, setFriends] = useState<FriendCard[]>(() => loadFriends())
   const [notifOn, setNotifOn] = useState(() => getNotifPref())
+  const [dailyBest, setDailyBest] = useState<DailyBest | null>(() => loadDailyBest())
+  const [dailyBoard, setDailyBoard] = useState<FriendCard[]>([])
+  const [remoteTop, setRemoteTop] = useState<FriendCard[]>([])
+  const [syncHint, setSyncHint] = useState<string | null>(null)
   const consecutiveRef = useRef(state.consecutiveSafe)
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
@@ -254,6 +283,24 @@ export function useGame() {
   const bombUsedRef = useRef(false)
   const skyBonusRef = useRef(0)
   const skyActiveRef = useRef(false)
+  const challengeRef = useRef(false)
+  const rngRef = useRef<() => number>(Math.random)
+
+  const refreshSync = useCallback(async () => {
+    const local = loadFriends()
+    const ids = local.map((f) => f.id)
+    const [remoteFriends, daily, top] = await Promise.all([
+      fetchFriendsRemote(ids),
+      fetchDailyRemote(),
+      fetchTopRemote(),
+    ])
+    if (remoteFriends.length) {
+      for (const card of remoteFriends) upsertFriend(card)
+      setFriends(loadFriends())
+    }
+    setDailyBoard(daily)
+    setRemoteTop(top)
+  }, [])
 
   useEffect(() => {
     getOrCreatePilotId()
@@ -263,6 +310,9 @@ export function useGame() {
       streak: state.profile.streak,
       lastFlightDate: state.profile.lastFlightDate,
       today: todayKey(),
+    })
+    void pushScore(loadProfile()).then((ok) => {
+      if (ok) void refreshSync()
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
   }, [])
@@ -308,6 +358,16 @@ export function useGame() {
     consecutiveRef.current = consecutiveSafe
     dispatch({ type: 'SET_PROFILE', profile })
 
+    if (result.challenge) {
+      const best = updateDailyBestFromFlight(
+        result.multiplier,
+        result.layer,
+        result.craftId,
+        result.outcome,
+      )
+      if (best) setDailyBest(best)
+    }
+
     for (let i = 0; i < profile.missions.length; i++) {
       const after = profile.missions[i]
       const prev = before.missions[i]
@@ -318,8 +378,12 @@ export function useGame() {
     if (result.outcome === 'cashed') {
       void notifySafeLanding(fmtX(result.multiplier))
     }
+
+    void pushScore(profile).then((ok) => {
+      if (ok) void refreshSync()
+    })
     return consecutiveSafe
-  }, [])
+  }, [refreshSync])
 
   const addFriend = useCallback((card: FriendCard) => {
     const me = getOrCreatePilotId()
@@ -345,12 +409,17 @@ export function useGame() {
     setNotifOn(false)
   }, [])
 
-  const startFlight = useCallback(() => {
+  const startFlight = useCallback((opts?: { challenge?: boolean }) => {
     const profile = loadProfile()
     if (profile.flightCredits <= 0) return false
 
     const craftId = profile.selectedCraft
     const skinId = profile.selectedSkin
+    const challenge = Boolean(opts?.challenge)
+    challengeRef.current = challenge
+    rngRef.current = challenge
+      ? createRng(dailyChallengeSeed(todayKey(), craftId))
+      : Math.random
 
     const spent: PlayerProfile = {
       ...profile,
@@ -360,9 +429,10 @@ export function useGame() {
     dispatch({ type: 'SET_PROFILE', profile: spent })
 
     void sfx.unlock()
+    void requestTiltPermission()
     haptic.tap(craftId)
     sfx.climb(craftId)
-    dispatch({ type: 'START_FLIGHT' })
+    dispatch({ type: 'START_FLIGHT', challenge })
     bombArmedRef.current = false
     bombUsedRef.current = false
     sfx.startProp(craftId)
@@ -370,9 +440,10 @@ export function useGame() {
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
 
     window.setTimeout(() => {
-      if (rollCrash(1, craftId)) {
+      const rng = rngRef.current
+      if (rollCrash(1, craftId, false, rng)) {
         const near = getLayerInfo(1, craftId)
-        const skyB = skyBonusRef.current
+        const skyB = challengeRef.current ? 0 : skyBonusRef.current
         const result: FlightResult = {
           outcome: 'crashed',
           layer: 0,
@@ -383,6 +454,7 @@ export function useGame() {
           skinId,
           bombUsed: false,
           skyBonus: skyB,
+          challenge: challengeRef.current,
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -401,7 +473,7 @@ export function useGame() {
           type: 'CLIMB_SUCCESS',
           layer: 1,
           craftId,
-          skyBonus: skyBonusRef.current,
+          skyBonus: challengeRef.current ? 0 : skyBonusRef.current,
         })
       }
     }, takeoffMs)
@@ -409,6 +481,7 @@ export function useGame() {
   }, [persistResult])
 
   const armBomb = useCallback(() => {
+    if (state.challengeMode || challengeRef.current) return false
     if (state.phase !== 'climbing' || state.layer < 1) return false
     if (state.bombArmed) return false
     if (animatingRef.current) return false
@@ -429,7 +502,7 @@ export function useGame() {
     sfx.bomb()
     window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
     return true
-  }, [state.phase, state.layer, state.bombArmed])
+  }, [state.phase, state.layer, state.bombArmed, state.challengeMode])
 
   const climb = useCallback(() => {
     if (animatingRef.current) return
@@ -437,8 +510,9 @@ export function useGame() {
     animatingRef.current = true
     const craftId = craftRef.current
     const skinId = skinRef.current
-    const shielded = bombArmedRef.current
-    const skyB = skyBonusRef.current
+    const challenge = challengeRef.current
+    const shielded = challenge ? false : bombArmedRef.current
+    const skyB = challenge ? 0 : skyBonusRef.current
     void sfx.unlock()
     haptic.climb(craftId)
     sfx.climb(craftId)
@@ -458,7 +532,7 @@ export function useGame() {
     }
 
     window.setTimeout(() => {
-      if (rollCrash(nextLayer, craftId, shielded)) {
+      if (rollCrash(nextLayer, craftId, shielded, rngRef.current)) {
         const near = getLayerInfo(nextLayer, craftId)
         const result: FlightResult = {
           outcome: 'crashed',
@@ -470,6 +544,7 @@ export function useGame() {
           skinId,
           bombUsed: bombUsedRef.current,
           skyBonus: skyB,
+          challenge,
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -503,7 +578,8 @@ export function useGame() {
     animatingRef.current = true
     const craftId = craftRef.current
     const skinId = skinRef.current
-    const skyB = skyBonusRef.current
+    const challenge = challengeRef.current
+    const skyB = challenge ? 0 : skyBonusRef.current
     haptic.land(craftId)
     sfx.land(craftId)
     const near = getLayerInfo(state.layer + 1, craftId)
@@ -517,6 +593,7 @@ export function useGame() {
       skinId,
       bombUsed: bombUsedRef.current,
       skyBonus: skyB,
+      challenge,
     }
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
@@ -534,11 +611,15 @@ export function useGame() {
     dispatch({ type: 'RESET_TO_HOME' })
   }, [])
 
-  const setScreen = useCallback((screen: Screen) => {
-    haptic.tap(craftRef.current)
-    void sfx.unlock()
-    dispatch({ type: 'SET_SCREEN', screen })
-  }, [])
+  const setScreen = useCallback(
+    (screen: Screen) => {
+      haptic.tap(craftRef.current)
+      void sfx.unlock()
+      dispatch({ type: 'SET_SCREEN', screen })
+      if (screen === 'leaderboard') void refreshSync()
+    },
+    [refreshSync],
+  )
 
   const hideTip = useCallback(() => dispatch({ type: 'HIDE_TIP' }), [])
 
@@ -594,7 +675,11 @@ export function useGame() {
   }, [])
 
   const friendEntries = friendsToEntries(friends)
-  const leaderboard = buildLeaderboard(state.profile, friendEntries)
+  const remoteEntries = friendsToEntries(remoteTop)
+  const leaderboard = buildLeaderboard(state.profile, [
+    ...friendEntries,
+    ...remoteEntries,
+  ])
   const youEntry = {
     id: 'you',
     name: `${state.profile.displayName} (Sen)`,
@@ -606,12 +691,46 @@ export function useGame() {
   const friendsLeaderboard = [...friendEntries, youEntry].sort(
     (a, b) => b.bestMultiplier - a.bestMultiplier,
   )
+  const youDaily = {
+    id: 'you',
+    name: `${state.profile.displayName} (Sen)`,
+    bestMultiplier: dailyBest?.bestMultiplier || 0,
+    bestLayer: dailyBest?.bestLayer || 0,
+    streak: state.profile.streak,
+    isYou: true as const,
+  }
+  const dailyLeaderboard = [
+    ...friendsToEntries(dailyBoard).filter((e) => e.id !== getOrCreatePilotId()),
+    youDaily,
+  ].sort((a, b) => b.bestMultiplier - a.bestMultiplier)
+
   const activeCraft = CRAFTS[state.profile.selectedCraft]
   const nextLayer = getLayerInfo(
     Math.max(1, state.layer + 1),
     state.profile.selectedCraft,
   )
-  const previewNextMultiplier = applySkyBonus(nextLayer.multiplier, state.skyBonus)
+  const previewNextMultiplier = applySkyBonus(
+    nextLayer.multiplier,
+    state.challengeMode ? 0 : state.skyBonus,
+  )
+
+  const shareDaily = useCallback(async () => {
+    const best = loadDailyBest()
+    const text = best
+      ? `Zincir: Drone — Bugünün meydan okuması: ${fmtX(best.bestMultiplier)} (K${best.bestLayer})`
+      : `Zincir: Drone — Bugünün meydan okumasına katıl! ${location.href}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Zincir: Drone', text, url: location.href })
+      } else {
+        await navigator.clipboard.writeText(text)
+        setSyncHint('Günlük skor kopyalandı')
+        window.setTimeout(() => setSyncHint(null), 2200)
+      }
+    } catch {
+      // cancelled
+    }
+  }, [])
 
   return {
     ...state,
@@ -632,10 +751,15 @@ export function useGame() {
     removeFriend,
     enableNotifications,
     disableNotifications,
+    refreshSync,
+    shareDaily,
     notifOn,
     notifPermission: notifPermission(),
+    dailyBest,
+    syncHint,
     leaderboard,
     friendsLeaderboard,
+    dailyLeaderboard,
     fmtX,
     formatSkyBonus,
     activeCraft,

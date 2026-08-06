@@ -3,6 +3,7 @@ import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS, scorePoints } from '../../game/vehicles'
 import type { CraftId } from '../../game/types'
 import { InstallBanner } from '../InstallBanner'
+import { fmtX } from '../../game/math'
 
 interface Props {
   game: GameApi
@@ -124,6 +125,39 @@ export function HomeScreen({ game }: Props) {
 
         <p className="mb-2 text-center text-xs text-fog">{craft.riskLabel}</p>
 
+        <div className="mb-3 rounded-2xl border border-amber/30 bg-amber/10 px-4 py-3 backdrop-blur-md">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-amber">
+                Günlük meydan okuma
+              </p>
+              <p className="mt-0.5 text-sm text-white">
+                Aynı seed · herkes aynı düşüş yolu
+              </p>
+            </div>
+            <p className="font-display text-2xl text-amber">
+              {game.dailyBest ? fmtX(game.dailyBest.bestMultiplier) : '—'}
+            </p>
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={noCredits}
+              onClick={() => game.startFlight({ challenge: true })}
+              className="flex-1 rounded-xl bg-amber/25 py-2.5 text-sm font-semibold text-amber disabled:opacity-40"
+            >
+              Challenge KALKIŞ
+            </button>
+            <button
+              type="button"
+              onClick={() => game.shareDaily()}
+              className="rounded-xl border border-white/15 px-3 py-2.5 text-sm text-white"
+            >
+              Paylaş
+            </button>
+          </div>
+        </div>
+
         <motion.button
           type="button"
           whileTap={{ scale: 0.97 }}
@@ -142,7 +176,7 @@ export function HomeScreen({ game }: Props) {
           <span className="mt-1 block text-sm font-medium text-ink/70">
             {noCredits
               ? 'Pil bitti — yarın yenilenir'
-              : `${craft.name} ile başparmakla başlat`}
+              : `${craft.name} · telefonu eğerek uçur`}
           </span>
         </motion.button>
       </div>

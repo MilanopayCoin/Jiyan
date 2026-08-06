@@ -28,7 +28,16 @@ Canlı: https://chaindrone.netlify.app
 - Three.js (geometrik drone + pervane animasyonu)
 - Tailwind CSS v4
 - Framer Motion
-- LocalStorage (seri, rozet, görev, geçmiş)
+- LocalStorage (seri, rozet, görev, geçmiş, arkadaş kodları)
+- PWA (service worker + ana ekrana ekle + yerel bildirimler)
+- Neon Postgres + Netlify Functions (`/api/sync`) — arkadaş / günlük skor sync
+- Günlük challenge (paylaşılan seed RNG) · cihaz eğimi (DeviceOrientation)
+
+### Neon DB
+
+Claimable Postgres (süreli). Kalıcı yapmak için claim edin ve `DATABASE_URL`’i Netlify env’e taşıyın:
+
+https://neon.new/claim/019fd967-b410-769a-9dc7-562b5815504e
 
 ## Oyun döngüsü
 

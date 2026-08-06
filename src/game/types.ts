@@ -41,6 +41,8 @@ export interface FlightResult {
   bombUsed?: boolean
   /** Sky bonus fraction applied (e.g. 0.15 = +15%) */
   skyBonus?: number
+  /** Daily challenge flight (seeded RNG) */
+  challenge?: boolean
 }
 
 export interface DailyMission {
