@@ -36,3 +36,14 @@ Canlı: https://chaindrone.netlify.app
 2. Her katmanda **YÜKSEL** veya **İNDİR**
 3. Düşme olasılığı katmanla artar; LED yeşil → sarı → kırmızı
 4. Düşüşte near-miss mesajı; inişte kazanç kilitlenir
+
+## Ayrı oyun: Messi vs Ronaldo Top Sektirme
+
+VR modları Zincir’den kaldırıldı; top sektirme ayrı uygulamada:
+
+```bash
+cd messi-ronaldo
+npm install
+npm run dev
+```
+

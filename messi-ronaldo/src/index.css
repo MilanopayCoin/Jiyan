@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bebas Neue", sans-serif;
+  --font-body: "Outfit", sans-serif;
+  --color-ink: #061018;
+  --color-pitch: #0d3d2a;
+  --color-deep: #0a1620;
+  --color-fog: #8ba3bd;
+  --color-messi: #75aadb;
+  --color-ronaldo: #e11d48;
+  --color-signal: #3dffa8;
+  --color-amber: #ffb84d;
+  --color-ice: #7dd3fc;
+  --color-panel: rgb(6 16 24 / 0.78);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  font-family: var(--font-body);
+  color: #e8f1fa;
+  background: var(--color-deep);
+  user-select: none;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}

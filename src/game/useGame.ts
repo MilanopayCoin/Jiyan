@@ -487,10 +487,6 @@ export function useGame() {
     return true
   }, [])
 
-  const reloadProfile = useCallback(() => {
-    dispatch({ type: 'SET_PROFILE', profile: loadProfile() })
-  }, [])
-
   const leaderboard = buildLeaderboard(state.profile)
   const activeCraft = CRAFTS[state.profile.selectedCraft]
   const nextLayer = getLayerInfo(
@@ -506,7 +502,6 @@ export function useGame() {
     cashOut,
     armBomb,
     purchaseBomb,
-    reloadProfile,
     setSkySample,
     goHome,
     setScreen,

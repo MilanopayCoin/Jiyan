@@ -8,13 +8,13 @@ interface Props {
 
 const ITEMS: { id: Screen; label: string }[] = [
   { id: 'home', label: 'Uçuş' },
-  { id: 'modes', label: 'VR' },
   { id: 'hangar', label: 'Hangar' },
+  { id: 'leaderboard', label: 'Sıra' },
   { id: 'profile', label: 'Profil' },
 ]
 
 export function BottomNav({ screen, onNavigate }: Props) {
-  if (screen === 'flight' || screen === 'result' || screen === 'vr-play') return null
+  if (screen === 'flight' || screen === 'result') return null
 
   return (
     <nav className="absolute inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
