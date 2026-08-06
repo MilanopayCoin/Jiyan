@@ -156,6 +156,15 @@ export function useGame() {
   const startFlight = useCallback(() => {
     const profile = loadProfile()
     if (profile.flightCredits <= 0) return false
+
+    // Spend one credit immediately so Pil counter updates on takeoff
+    const spent: PlayerProfile = {
+      ...profile,
+      flightCredits: profile.flightCredits - 1,
+    }
+    saveProfile(spent)
+    dispatch({ type: 'SET_PROFILE', profile: spent })
+
     haptic.tap()
     dispatch({ type: 'START_FLIGHT' })
     // Auto climb to layer 1 after brief takeoff

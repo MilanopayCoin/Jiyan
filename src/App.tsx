@@ -21,7 +21,9 @@ export default function App() {
         game.shaking ? 'shake' : ''
       }`}
     >
-      <CameraBackground />
+      <CameraBackground
+        showHint={game.screen === 'home' || game.screen === 'flight'}
+      />
 
       {showDrone && (
         <DroneScene

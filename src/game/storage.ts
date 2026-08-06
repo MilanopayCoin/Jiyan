@@ -102,7 +102,8 @@ export function applyFlightResult(
   if (profile.flights + 1 >= 20) badges.add('filo-komutani')
 
   let missions = profile.missions.map((m) => ({ ...m }))
-  let credits = Math.max(0, profile.flightCredits - 1)
+  // Credit already spent on takeoff; only award mission bonuses here
+  let credits = profile.flightCredits
 
   // Update missions
   missions = missions.map((m) => {

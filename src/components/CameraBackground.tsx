@@ -3,9 +3,14 @@ import { requestRearCamera, stopStream, type CameraStatus } from '../utils/camer
 
 interface Props {
   className?: string
+  /** Show sky-fallback tip (home / flight only) */
+  showHint?: boolean
 }
 
-export function CameraBackground({ className = '' }: Props) {
+export function CameraBackground({
+  className = '',
+  showHint = false,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<CameraStatus>('pending')
   const streamRef = useRef<MediaStream | null>(null)
@@ -89,7 +94,7 @@ export function CameraBackground({ className = '' }: Props) {
         }}
       />
 
-      {showFallback && (
+      {showHint && showFallback && (
         <div className="pointer-events-none absolute left-1/2 top-[12%] z-10 w-[90%] max-w-sm -translate-x-1/2 text-center">
           <p className="rounded-full bg-black/40 px-4 py-2 text-xs text-fog backdrop-blur-sm">
             Kamera kapalı — gökyüzü modu aktif. En iyi deneyim için kamerayı
