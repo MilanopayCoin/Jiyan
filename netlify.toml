@@ -1,11 +1,15 @@
+# Zincir: Drone — Netlify production build
+# Dashboard'da Base directory BOŞ olmalı; aksi halde bu dosya bulunamaz.
+
 [build]
-  command = "npm run build"
+  command = "npm ci && npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "22"
+  NPM_FLAGS = "--no-fund --no-audit"
 
-# SPA fallback — tüm rotaları index.html'e yönlendir
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"

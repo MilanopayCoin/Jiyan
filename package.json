@@ -10,6 +10,9 @@
     "test": "vitest run",
     "preview": "vite preview"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@types/three": "^0.185.4",
     "framer-motion": "^13.0.0",
