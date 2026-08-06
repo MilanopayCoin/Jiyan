@@ -8,7 +8,8 @@ interface Props {
 }
 
 export function FlightScreen({ game }: Props) {
-  const next = getLayerInfo(Math.max(1, game.layer + 1))
+  const craftId = game.profile.selectedCraft
+  const next = getLayerInfo(Math.max(1, game.layer + 1), craftId)
   const canAct = game.phase === 'climbing' && game.layer >= 1
   const ledColor =
     game.led === 'safe'

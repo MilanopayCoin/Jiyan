@@ -1,17 +1,28 @@
 import { motion } from 'framer-motion'
 import type { GameApi } from '../../game/useGame'
+import { CRAFTS, SKINS, scorePoints } from '../../game/vehicles'
+import type { CraftId } from '../../game/types'
 
 interface Props {
   game: GameApi
 }
 
+const ICONS: Record<CraftId, string> = {
+  drone: '◈',
+  plane: '✈',
+  rocket: '▲',
+  balloon: '○',
+}
+
 export function HomeScreen({ game }: Props) {
   const mission = game.profile.missions.find((m) => !m.completed) ?? game.profile.missions[0]
   const noCredits = game.profile.flightCredits <= 0
+  const craft = CRAFTS[game.profile.selectedCraft]
+  const skin = SKINS[game.profile.selectedSkin]
+  const points = scorePoints(game.profile.totalCashed)
 
   return (
     <div className="relative z-20 flex h-full flex-col">
-      {/* Brand hero */}
       <header className="px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
         <motion.div
           initial={{ opacity: 0, y: -12 }}
@@ -27,7 +38,7 @@ export function HomeScreen({ game }: Props) {
           </p>
         </motion.div>
 
-        <div className="mt-5 flex items-center justify-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <div className="rounded-full border border-white/15 bg-black/35 px-4 py-1.5 backdrop-blur-sm">
             <span className="text-xs text-fog">Seri </span>
             <span className="font-display text-xl text-signal">
@@ -40,13 +51,28 @@ export function HomeScreen({ game }: Props) {
               {game.profile.flightCredits}
             </span>
           </div>
+          <div className="rounded-full border border-white/15 bg-black/35 px-4 py-1.5 backdrop-blur-sm">
+            <span className="text-xs text-fog">Puan </span>
+            <span className="font-display text-xl text-ice">{points}</span>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => game.setScreen('hangar')}
+          className="mx-auto mt-3 flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur-sm"
+        >
+          <span className="text-ice">{ICONS[craft.id]}</span>
+          <span className="text-sm text-white">
+            {craft.name}
+            {skin.rarity !== 'common' ? ` · ${skin.name}` : ''}
+          </span>
+          <span className="text-xs text-fog">Hangar →</span>
+        </button>
       </header>
 
-      {/* Mid spacer — drone visible through Camera + DroneScene */}
       <div className="flex-1" />
 
-      {/* Thumb zone */}
       <div className="px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         {game.tipVisible && (
           <motion.button
@@ -81,6 +107,8 @@ export function HomeScreen({ game }: Props) {
           </div>
         )}
 
+        <p className="mb-2 text-center text-xs text-fog">{craft.riskLabel}</p>
+
         <motion.button
           type="button"
           whileTap={{ scale: 0.97 }}
@@ -97,7 +125,9 @@ export function HomeScreen({ game }: Props) {
             KALKIŞ
           </span>
           <span className="mt-1 block text-sm font-medium text-ink/70">
-            {noCredits ? 'Pil bitti — yarın yenilenir' : 'Başparmakla başlat'}
+            {noCredits
+              ? 'Pil bitti — yarın yenilenir'
+              : `${craft.name} ile başparmakla başlat`}
           </span>
         </motion.button>
       </div>

@@ -1,6 +1,7 @@
 import { BADGE_LABELS } from '../../game/storage'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
+import { CRAFTS, SKINS, scorePoints } from '../../game/vehicles'
 
 interface Props {
   game: GameApi
@@ -8,6 +9,9 @@ interface Props {
 
 export function ProfileScreen({ game }: Props) {
   const { profile } = game
+  const craft = CRAFTS[profile.selectedCraft]
+  const skin = SKINS[profile.selectedSkin]
+  const points = scorePoints(profile.totalCashed)
 
   return (
     <div className="relative z-20 flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
@@ -24,12 +28,28 @@ export function ProfileScreen({ game }: Props) {
         />
       </label>
 
+      <button
+        type="button"
+        onClick={() => game.setScreen('hangar')}
+        className="mt-3 rounded-2xl border border-white/10 bg-panel px-4 py-3 text-left backdrop-blur-md"
+      >
+        <p className="text-xs text-fog">Aktif filo</p>
+        <p className="font-display text-2xl text-ice">
+          {craft.name}
+          {skin.rarity !== 'common' ? ` · ${skin.name}` : ''}
+        </p>
+        <p className="text-xs text-fog">
+          {profile.unlockedCrafts.length} araç · {profile.unlockedSkins.length}{' '}
+          skin · Hangar →
+        </p>
+      </button>
+
       <div className="mt-5 grid grid-cols-2 gap-3">
         {[
           { label: 'Rekor', value: profile.bestMultiplier ? fmtX(profile.bestMultiplier) : '—' },
           { label: 'Seri', value: String(profile.streak) },
           { label: 'Uçuş', value: String(profile.flights) },
-          { label: 'Güvenli iniş', value: String(profile.safeLandings) },
+          { label: 'Puan', value: String(points) },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -86,6 +106,7 @@ export function ProfileScreen({ game }: Props) {
             className="flex items-center justify-between rounded-xl border border-white/10 bg-panel px-4 py-2.5 text-sm backdrop-blur-md"
           >
             <span className={h.outcome === 'cashed' ? 'text-signal' : 'text-danger'}>
+              {CRAFTS[h.craftId ?? 'drone'].name} ·{' '}
               {h.outcome === 'cashed' ? 'İniş' : 'Düşüş'} · K{h.layer}
             </span>
             <span className="font-display text-xl text-white">

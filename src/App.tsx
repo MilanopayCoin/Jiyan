@@ -6,11 +6,12 @@ import { FlightScreen } from './components/screens/FlightScreen'
 import { ResultScreen } from './components/screens/ResultScreen'
 import { LeaderboardScreen } from './components/screens/LeaderboardScreen'
 import { ProfileScreen } from './components/screens/ProfileScreen'
+import { HangarScreen } from './components/screens/HangarScreen'
 import { useGame } from './game/useGame'
 
 export default function App() {
   const game = useGame()
-  const showDrone =
+  const showCraft =
     game.screen === 'home' ||
     game.screen === 'flight' ||
     game.screen === 'result'
@@ -25,7 +26,7 @@ export default function App() {
         showHint={game.screen === 'home' || game.screen === 'flight'}
       />
 
-      {showDrone && (
+      {showCraft && (
         <DroneScene
           layer={game.screen === 'home' ? 0 : game.layer}
           phase={
@@ -40,6 +41,8 @@ export default function App() {
                 : game.phase
           }
           led={game.screen === 'home' ? 'safe' : game.led}
+          craftId={game.profile.selectedCraft}
+          skinId={game.profile.selectedSkin}
         />
       )}
 
@@ -55,6 +58,7 @@ export default function App() {
       {game.screen === 'result' && <ResultScreen game={game} />}
       {game.screen === 'leaderboard' && <LeaderboardScreen game={game} />}
       {game.screen === 'profile' && <ProfileScreen game={game} />}
+      {game.screen === 'hangar' && <HangarScreen game={game} />}
 
       <BottomNav screen={game.screen} onNavigate={game.setScreen} />
     </div>

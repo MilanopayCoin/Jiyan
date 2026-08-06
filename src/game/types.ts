@@ -1,10 +1,28 @@
-export type Screen = 'home' | 'flight' | 'result' | 'leaderboard' | 'profile'
+export type Screen =
+  | 'home'
+  | 'flight'
+  | 'result'
+  | 'leaderboard'
+  | 'profile'
+  | 'hangar'
 
 export type FlightPhase = 'idle' | 'climbing' | 'landing' | 'crashing' | 'done'
 
 export type LedLevel = 'safe' | 'caution' | 'critical'
 
 export type Outcome = 'cashed' | 'crashed'
+
+export type CraftId = 'drone' | 'plane' | 'rocket' | 'balloon'
+
+export type CraftSkinId =
+  | 'drone-default'
+  | 'drone-gold'
+  | 'plane-default'
+  | 'rocket-default'
+  | 'rocket-night'
+  | 'balloon-default'
+
+export type RiskTone = 'calm' | 'safe' | 'balanced' | 'wild'
 
 export interface LayerInfo {
   layer: number
@@ -18,6 +36,8 @@ export interface FlightResult {
   multiplier: number
   nearMissMultiplier: number
   timestamp: number
+  craftId: CraftId
+  skinId: CraftSkinId
 }
 
 export interface DailyMission {
@@ -44,6 +64,10 @@ export interface PlayerProfile {
   history: FlightResult[]
   missions: DailyMission[]
   missionDate: string | null
+  unlockedCrafts: CraftId[]
+  unlockedSkins: CraftSkinId[]
+  selectedCraft: CraftId
+  selectedSkin: CraftSkinId
 }
 
 export interface LeaderboardEntry {

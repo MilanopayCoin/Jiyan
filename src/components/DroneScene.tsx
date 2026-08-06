@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import type { FlightPhase, LedLevel } from '../game/types'
+import type { CraftId, CraftSkinId, FlightPhase, LedLevel } from '../game/types'
+import { CRAFTS, SKINS } from '../game/vehicles'
 
 interface Props {
   layer: number
   phase: FlightPhase
   led: LedLevel
+  craftId: CraftId
+  skinId: CraftSkinId
   className?: string
 }
 
@@ -15,27 +18,36 @@ const LED_COLORS: Record<LedLevel, number> = {
   critical: 0xff4d6a,
 }
 
-function createDrone(): {
+type CraftParts = {
   group: THREE.Group
   props: THREE.Mesh[]
   leds: THREE.Mesh[]
-} {
-  const group = new THREE.Group()
+}
 
+function mats(skinId: CraftSkinId) {
+  const skin = SKINS[skinId]
   const bodyMat = new THREE.MeshStandardMaterial({
-    color: 0x1a2332,
+    color: skin.bodyColor,
     metalness: 0.7,
     roughness: 0.35,
+    emissive: skin.emissiveBoost ? skin.accentColor : 0x000000,
+    emissiveIntensity: skin.emissiveBoost ?? 0,
   })
   const accentMat = new THREE.MeshStandardMaterial({
-    color: 0x7dd3fc,
+    color: skin.accentColor,
     metalness: 0.5,
     roughness: 0.4,
+    emissive: skin.accentColor,
+    emissiveIntensity: 0.15 + (skin.emissiveBoost ?? 0),
   })
+  return { bodyMat, accentMat, skin }
+}
 
-  // Central body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.55), bodyMat)
-  group.add(body)
+function createDrone(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+
+  group.add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.16, 0.55), bodyMat))
 
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(0.18, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -50,7 +62,6 @@ function createDrone(): {
   dome.position.y = 0.08
   group.add(dome)
 
-  // Arms + motors + props
   const armPositions: [number, number][] = [
     [0.42, 0.42],
     [0.42, -0.42],
@@ -61,10 +72,7 @@ function createDrone(): {
   const leds: THREE.Mesh[] = []
 
   armPositions.forEach(([x, z], i) => {
-    const arm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.05, 0.55),
-      accentMat,
-    )
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.55), accentMat)
     arm.position.set(x * 0.55, 0, z * 0.55)
     arm.rotation.y = Math.atan2(z, x)
     group.add(arm)
@@ -104,12 +112,8 @@ function createDrone(): {
     leds.push(led)
   })
 
-  // Landing skids
   ;[-0.22, 0.22].forEach((z) => {
-    const skid = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.03, 0.04),
-      accentMat,
-    )
+    const skid = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.04), accentMat)
     skid.position.set(0, -0.14, z)
     group.add(skid)
   })
@@ -117,10 +121,203 @@ function createDrone(): {
   return { group, props, leds }
 }
 
-export function DroneScene({ layer, phase, led, className = '' }: Props) {
+function createPlane(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const fuselage = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.12, 0.7, 6, 12),
+    bodyMat,
+  )
+  fuselage.rotation.z = Math.PI / 2
+  group.add(fuselage)
+
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.28), accentMat)
+  wing.position.y = 0.02
+  group.add(wing)
+
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 0.16), accentMat)
+  tail.position.set(-0.38, 0.08, 0)
+  group.add(tail)
+
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.14), bodyMat)
+  fin.position.set(-0.4, 0.18, 0)
+  group.add(fin)
+
+  const prop = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.5, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xdfe7ef, metalness: 0.4 }),
+  )
+  prop.position.set(0.48, 0, 0)
+  prop.userData.spinDir = 1
+  prop.userData.spinAxis = 'x'
+  group.add(prop)
+  props.push(prop)
+
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 10, 10),
+    new THREE.MeshStandardMaterial({
+      color: LED_COLORS.safe,
+      emissive: LED_COLORS.safe,
+      emissiveIntensity: 1.4,
+    }),
+  )
+  led.position.set(0.2, 0.08, 0)
+  group.add(led)
+  leds.push(led)
+
+  return { group, props, leds }
+}
+
+function createRocket(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.85, 14), bodyMat)
+  group.add(body)
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.32, 14), accentMat)
+  nose.position.y = 0.58
+  group.add(nose)
+
+  ;[-1, 1].forEach((side) => {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.28, 0.22), accentMat)
+    fin.position.set(side * 0.22, -0.28, 0)
+    group.add(fin)
+  })
+  const finZ = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.06), accentMat)
+  finZ.position.set(0, -0.28, 0.22)
+  group.add(finZ)
+
+  // Exhaust flicker disc (spins as "prop" stand-in)
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(0.12, 0.35, 10),
+    new THREE.MeshStandardMaterial({
+      color: 0xff6b35,
+      emissive: 0xff6b35,
+      emissiveIntensity: 1.8,
+      transparent: true,
+      opacity: 0.85,
+    }),
+  )
+  flame.position.y = -0.55
+  flame.rotation.x = Math.PI
+  flame.userData.spinDir = 1
+  flame.userData.pulse = true
+  group.add(flame)
+  props.push(flame)
+
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 10, 10),
+    new THREE.MeshStandardMaterial({
+      color: LED_COLORS.safe,
+      emissive: LED_COLORS.safe,
+      emissiveIntensity: 1.4,
+    }),
+  )
+  led.position.set(0, 0.2, 0.18)
+  group.add(led)
+  leds.push(led)
+
+  return { group, props, leds }
+}
+
+function createBalloon(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const balloon = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), bodyMat)
+  balloon.position.y = 0.35
+  group.add(balloon)
+
+  const basket = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.22), accentMat)
+  basket.position.y = -0.28
+  group.add(basket)
+
+  ;[
+    [0.12, 0.12],
+    [0.12, -0.12],
+    [-0.12, 0.12],
+    [-0.12, -0.12],
+  ].forEach(([x, z]) => {
+    const rope = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.008, 0.45, 6),
+      new THREE.MeshStandardMaterial({ color: 0xc4b59a }),
+    )
+    rope.position.set(x, 0.05, z)
+    group.add(rope)
+  })
+
+  // Gentle sway marker
+  const sway = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 8, 8),
+    new THREE.MeshStandardMaterial({
+      color: accentMat.color,
+      transparent: true,
+      opacity: 0.01,
+    }),
+  )
+  sway.userData.spinDir = 1
+  sway.userData.pulse = true
+  group.add(sway)
+  props.push(sway)
+
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 10, 10),
+    new THREE.MeshStandardMaterial({
+      color: LED_COLORS.safe,
+      emissive: LED_COLORS.safe,
+      emissiveIntensity: 1.4,
+    }),
+  )
+  led.position.set(0, -0.2, 0.12)
+  group.add(led)
+  leds.push(led)
+
+  return { group, props, leds }
+}
+
+function createCraft(craftId: CraftId, skinId: CraftSkinId): CraftParts {
+  switch (craftId) {
+    case 'plane':
+      return createPlane(skinId)
+    case 'rocket':
+      return createRocket(skinId)
+    case 'balloon':
+      return createBalloon(skinId)
+    default:
+      return createDrone(skinId)
+  }
+}
+
+function disposeObject(root: THREE.Object3D) {
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.geometry.dispose()
+      const mat = obj.material
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+      else mat.dispose()
+    }
+  })
+}
+
+export function DroneScene({
+  layer,
+  phase,
+  led,
+  craftId,
+  skinId,
+  className = '',
+}: Props) {
   const mountRef = useRef<HTMLDivElement>(null)
-  const stateRef = useRef({ layer, phase, led })
-  stateRef.current = { layer, phase, led }
+  const stateRef = useRef({ layer, phase, led, craftId, skinId })
+  stateRef.current = { layer, phase, led, craftId, skinId }
 
   useEffect(() => {
     const mount = mountRef.current
@@ -155,11 +352,10 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
     rim.position.set(-2, 1, -2)
     scene.add(rim)
 
-    const { group: drone, props, leds } = createDrone()
-    drone.position.set(0, 0.15, 0)
-    scene.add(drone)
+    let craft = createCraft(craftId, skinId)
+    craft.group.position.set(0, 0.15, 0)
+    scene.add(craft.group)
 
-    // Soft ground shadow disc (reads as "landed on surface")
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.7, 32),
       new THREE.MeshBasicMaterial({
@@ -172,6 +368,7 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
     shadow.position.y = -0.2
     scene.add(shadow)
 
+    let currentKey = `${craftId}:${skinId}`
     let targetScale = 1
     let currentScale = 1
     let targetY = 0.15
@@ -185,12 +382,22 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
 
     const applyLed = (level: LedLevel) => {
       const c = LED_COLORS[level]
-      leds.forEach((ledMesh) => {
+      craft.leds.forEach((ledMesh) => {
         const mat = ledMesh.material as THREE.MeshStandardMaterial
         mat.color.setHex(c)
         mat.emissive.setHex(c)
         mat.emissiveIntensity = level === 'critical' ? 2.2 : 1.4
       })
+    }
+
+    const swapCraft = (id: CraftId, skin: CraftSkinId) => {
+      scene.remove(craft.group)
+      disposeObject(craft.group)
+      craft = createCraft(id, skin)
+      craft.group.position.set(0, currentY, 0)
+      craft.group.scale.setScalar(currentScale)
+      scene.add(craft.group)
+      currentKey = `${id}:${skin}`
     }
 
     const onResize = () => {
@@ -206,53 +413,70 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
     const tick = () => {
       if (disposed) return
       raf = requestAnimationFrame(tick)
-      const { layer: L, phase: P, led: ledLevel } = stateRef.current
+      const {
+        layer: L,
+        phase: P,
+        led: ledLevel,
+        craftId: cid,
+        skinId: sid,
+      } = stateRef.current
+
+      if (`${cid}:${sid}` !== currentKey) swapCraft(cid, sid)
 
       applyLed(ledLevel)
+      const visual = CRAFTS[cid].climbVisual
 
-      // Prop spin — faster when climbing
-      const spinSpeed = P === 'crashing' ? 0.08 : P === 'landing' ? 0.15 : 0.45
-      props.forEach((p) => {
-        p.rotation.y += spinSpeed * (p.userData.spinDir as number)
+      const spinSpeed =
+        P === 'crashing' ? 0.08 : P === 'landing' ? 0.15 : 0.35 * visual
+      craft.props.forEach((p) => {
+        const dir = (p.userData.spinDir as number) || 1
+        if (p.userData.spinAxis === 'x') p.rotation.x += spinSpeed * dir
+        else if (p.userData.pulse) {
+          const mat = p.material as THREE.MeshStandardMaterial
+          if (mat.emissiveIntensity !== undefined) {
+            mat.emissiveIntensity = 1.2 + Math.sin(bobPhase * 4) * 0.8
+          }
+          p.scale.y = 1 + Math.sin(bobPhase * 5) * 0.15
+        } else p.rotation.y += spinSpeed * dir
       })
 
-      // Scale / altitude from layer (shrink = farther)
       if (P === 'idle' || (P === 'climbing' && L === 0)) {
         targetScale = 1
         targetY = 0.15
         windAmp = 0
       } else if (P === 'climbing' || P === 'done') {
-        targetScale = Math.max(0.18, 1 - L * 0.09)
-        targetY = 0.15 + L * 0.22
+        targetScale = Math.max(0.18, 1 - L * 0.09 * Math.min(visual, 1.3))
+        targetY = 0.15 + L * 0.22 * visual
         windAmp = Math.min(0.08, L * 0.012)
       }
 
       if (P === 'crashing') {
         crashT += 0.04
-        drone.rotation.z = Math.sin(crashT * 8) * 0.45
-        drone.rotation.x = Math.sin(crashT * 5) * 0.25
-        drone.position.x = Math.sin(crashT * 6) * 0.35
+        craft.group.rotation.z = Math.sin(crashT * 8) * 0.45
+        craft.group.rotation.x = Math.sin(crashT * 5) * 0.25
+        craft.group.position.x = Math.sin(crashT * 6) * 0.35
         currentY = THREE.MathUtils.lerp(currentY, -1.8, 0.06)
         currentScale = THREE.MathUtils.lerp(currentScale, 0.55, 0.05)
-        shadow.material.opacity = THREE.MathUtils.lerp(
-          (shadow.material as THREE.MeshBasicMaterial).opacity,
-          0,
-          0.1,
-        )
+        ;(shadow.material as THREE.MeshBasicMaterial).opacity =
+          THREE.MathUtils.lerp(
+            (shadow.material as THREE.MeshBasicMaterial).opacity,
+            0,
+            0.1,
+          )
       } else if (P === 'landing') {
         landT += 0.05
         targetY = 0.15
         targetScale = 1
-        drone.rotation.z = Math.sin(landT * 3) * 0.05
-        drone.rotation.x = 0
-        drone.position.x = THREE.MathUtils.lerp(drone.position.x, 0, 0.1)
+        craft.group.rotation.z = Math.sin(landT * 3) * 0.05
+        craft.group.rotation.x = 0
+        craft.group.position.x = THREE.MathUtils.lerp(craft.group.position.x, 0, 0.1)
       } else {
         crashT = 0
         landT = 0
-        bobPhase += 0.035
-        drone.rotation.z = Math.sin(bobPhase) * (0.04 + windAmp)
-        drone.rotation.x = Math.cos(bobPhase * 0.7) * 0.03
-        drone.position.x = Math.sin(bobPhase * 0.5) * windAmp * 2
+        bobPhase += 0.035 * (cid === 'balloon' ? 0.7 : 1)
+        craft.group.rotation.z = Math.sin(bobPhase) * (0.04 + windAmp)
+        craft.group.rotation.x = Math.cos(bobPhase * 0.7) * 0.03
+        craft.group.position.x = Math.sin(bobPhase * 0.5) * windAmp * 2
         ;(shadow.material as THREE.MeshBasicMaterial).opacity =
           0.12 + currentScale * 0.16
       }
@@ -262,10 +486,11 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
         currentY = THREE.MathUtils.lerp(currentY, targetY, 0.08)
       }
 
-      drone.scale.setScalar(currentScale)
-      drone.position.y = currentY + (P === 'climbing' ? Math.sin(bobPhase) * 0.03 : 0)
+      craft.group.scale.setScalar(currentScale)
+      craft.group.position.y =
+        currentY + (P === 'climbing' ? Math.sin(bobPhase) * 0.03 : 0)
       shadow.scale.setScalar(currentScale * 1.2)
-      shadow.position.x = drone.position.x
+      shadow.position.x = craft.group.position.x
 
       renderer.render(scene, camera)
     }
@@ -275,19 +500,16 @@ export function DroneScene({ layer, phase, led, className = '' }: Props) {
       disposed = true
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
+      disposeObject(craft.group)
+      shadow.geometry.dispose()
+      ;(shadow.material as THREE.Material).dispose()
       renderer.dispose()
-      scene.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) {
-          obj.geometry.dispose()
-          const mat = obj.material
-          if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
-          else mat.dispose()
-        }
-      })
       if (renderer.domElement.parentNode === mount) {
         mount.removeChild(renderer.domElement)
       }
     }
+    // Mount once; craft swaps handled in tick via stateRef
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

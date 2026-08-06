@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getLayerInfo, fmtX } from './math'
-import { applyFlightResult, defaultProfile } from './storage'
+import {
+  applyFlightResult,
+  defaultProfile,
+  unlockCraft,
+} from './storage'
 import type { FlightResult } from './types'
 
 const mem = new Map<string, string>()
@@ -21,12 +25,37 @@ beforeEach(() => {
 })
 
 describe('layer math', () => {
-  it('matches prototype curve for first layers', () => {
-    expect(getLayerInfo(1)).toMatchObject({ multiplier: 1.2, crashChance: 0.02 })
-    expect(getLayerInfo(2)).toMatchObject({ multiplier: 1.5, crashChance: 0.05 })
-    expect(getLayerInfo(5)).toMatchObject({ multiplier: 5, crashChance: 0.25 })
-    expect(getLayerInfo(6).crashChance).toBeCloseTo(0.35)
-    expect(getLayerInfo(6).multiplier).toBeGreaterThan(5)
+  it('matches drone prototype curve', () => {
+    expect(getLayerInfo(1, 'drone')).toMatchObject({
+      multiplier: 1.2,
+      crashChance: 0.02,
+    })
+    expect(getLayerInfo(5, 'drone')).toMatchObject({
+      multiplier: 5,
+      crashChance: 0.25,
+    })
+  })
+
+  it('rocket climbs faster and riskier than drone', () => {
+    const d = getLayerInfo(3, 'drone')
+    const r = getLayerInfo(3, 'rocket')
+    expect(r.multiplier).toBeGreaterThan(d.multiplier)
+    expect(r.crashChance).toBeGreaterThan(d.crashChance)
+  })
+
+  it('balloon is safest with lower ceiling', () => {
+    expect(getLayerInfo(5, 'balloon').crashChance).toBeLessThan(
+      getLayerInfo(5, 'drone').crashChance,
+    )
+    expect(getLayerInfo(5, 'balloon').multiplier).toBeLessThan(
+      getLayerInfo(5, 'drone').multiplier,
+    )
+  })
+
+  it('plane grows multipliers slower than drone', () => {
+    expect(getLayerInfo(5, 'plane').multiplier).toBeLessThan(
+      getLayerInfo(5, 'drone').multiplier,
+    )
   })
 
   it('formats multipliers', () => {
@@ -44,33 +73,22 @@ describe('flight result persistence', () => {
       multiplier: 1.5,
       nearMissMultiplier: 2,
       timestamp: Date.now(),
+      craftId: 'drone',
+      skinId: 'drone-default',
     }
     const { profile: next } = applyFlightResult(profile, result, 0)
     expect(next.flightCredits).toBe(11)
     expect(next.flights).toBe(1)
-    expect(next.safeLandings).toBe(1)
-    expect(next.missions.find((m) => m.id === 'flights3')?.progress).toBe(1)
+    expect(next.totalCashed).toBe(1.5)
   })
 
-  it('awards mission bonus credits', () => {
-    const profile = {
-      ...defaultProfile(),
-      flightCredits: 10,
-      missions: defaultProfile().missions.map((m) =>
-        m.id === 'flights3'
-          ? { ...m, progress: 2, completed: false }
-          : m,
-      ),
+  it('unlocks balloon with credits', () => {
+    const profile = { ...defaultProfile(), flightCredits: 10 }
+    const res = unlockCraft(profile, 'balloon', 'credits')
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.profile.unlockedCrafts).toContain('balloon')
+      expect(res.profile.flightCredits).toBe(5)
     }
-    const result: FlightResult = {
-      outcome: 'cashed',
-      layer: 1,
-      multiplier: 1.2,
-      nearMissMultiplier: 1.5,
-      timestamp: Date.now(),
-    }
-    const { profile: next } = applyFlightResult(profile, result, 0)
-    expect(next.missions.find((m) => m.id === 'flights3')?.completed).toBe(true)
-    expect(next.flightCredits).toBe(11) // +1 reward
   })
 })

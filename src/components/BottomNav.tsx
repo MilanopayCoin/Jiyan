@@ -8,7 +8,8 @@ interface Props {
 
 const ITEMS: { id: Screen; label: string }[] = [
   { id: 'home', label: 'Uçuş' },
-  { id: 'leaderboard', label: 'Sıralama' },
+  { id: 'hangar', label: 'Hangar' },
+  { id: 'leaderboard', label: 'Sıra' },
   { id: 'profile', label: 'Profil' },
 ]
 
@@ -26,7 +27,7 @@ export function BottomNav({ screen, onNavigate }: Props) {
               key={item.id}
               type="button"
               onClick={() => onNavigate(item.id)}
-              className="relative flex min-h-12 min-w-[28%] flex-col items-center justify-center gap-0.5 rounded-xl px-3 py-1.5 text-sm transition"
+              className="relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-sm transition"
             >
               {active && (
                 <motion.span
@@ -36,7 +37,7 @@ export function BottomNav({ screen, onNavigate }: Props) {
                 />
               )}
               <span
-                className={`relative font-display text-lg tracking-wide ${
+                className={`relative font-display text-base tracking-wide ${
                   active ? 'text-signal' : 'text-fog'
                 }`}
               >

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
+import { CRAFTS, SKINS } from '../../game/vehicles'
 
 interface Props {
   game: GameApi
@@ -11,11 +12,15 @@ export function ResultScreen({ game }: Props) {
   if (!result) return null
 
   const won = result.outcome === 'cashed'
+  const craft = CRAFTS[result.craftId]
+  const skin = SKINS[result.skinId]
+  const rare = skin.rarity !== 'common'
 
   const share = async () => {
+    const craftBit = rare ? `${craft.name} (${skin.name})` : craft.name
     const text = won
-      ? `Zincir: Drone — ${fmtX(result.multiplier)} irtifada indirdim! 🛸`
-      : `Zincir: Drone — ${fmtX(result.nearMissMultiplier)}'e az kaldı, sinyal koptu!`
+      ? `Zincir: Drone — ${craftBit} ile ${fmtX(result.multiplier)} indirdim!`
+      : `Zincir: Drone — ${craftBit} ile ${fmtX(result.nearMissMultiplier)}'e az kaldı!`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Zincir: Drone', text, url: location.href })
@@ -45,6 +50,10 @@ export function ResultScreen({ game }: Props) {
         >
           <p className="font-display text-sm tracking-[0.3em] text-fog">
             {won ? 'GÜVENLİ İNİŞ' : 'SİNYAL KESİLDİ'}
+          </p>
+          <p className="mt-1 text-sm text-ice">
+            {craft.name}
+            {rare ? ` · ${skin.name}` : ''}
           </p>
           <p
             className={`mt-2 font-display text-[clamp(3.5rem,16vw,5rem)] leading-none ${
