@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bebas Neue", sans-serif;
+  --font-body: "Outfit", sans-serif;
+
+  --color-ink: #061018;
+  --color-sky-deep: #0a1628;
+  --color-sky-mid: #132a45;
+  --color-fog: #8ba3bd;
+  --color-signal: #3dffa8;
+  --color-signal-dim: #1a8f5c;
+  --color-amber: #ffb84d;
+  --color-danger: #ff4d6a;
+  --color-ice: #7dd3fc;
+  --color-panel: rgb(6 16 24 / 0.72);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+body {
+  font-family: var(--font-body);
+  color: #e8f1fa;
+  background: var(--color-sky-deep);
+  user-select: none;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+@keyframes screen-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 3px) rotate(-0.4deg);
+  }
+  40% {
+    transform: translate(7px, -4px) rotate(0.5deg);
+  }
+  60% {
+    transform: translate(-5px, -2px) rotate(-0.3deg);
+  }
+  80% {
+    transform: translate(4px, 5px) rotate(0.2deg);
+  }
+}
+
+@keyframes flash-red {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes wind-sway {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px currentColor);
+  }
+}
+
+.shake {
+  animation: screen-shake 0.45s ease-in-out;
+}
+
+.flash-danger {
+  animation: flash-red 0.55s ease-out forwards;
+}
+
+.wind-layer {
+  animation: wind-sway 1.8s ease-in-out infinite;
+}
