@@ -88,8 +88,14 @@ export function HomeScreen({ game }: Props) {
             onClick={game.hideTip}
             className="mb-4 w-full text-center text-sm text-ice/90"
           >
-            Kamerayı gökyüzüne çevir — en iyi deneyim için!
+            Kamerayı gökyüzüne çevir — çarpan +10–20% bonus!
           </motion.button>
+        )}
+
+        {game.skyActive && (
+          <div className="mb-3 rounded-2xl border border-ice/30 bg-ice/10 px-4 py-2 text-center text-sm text-ice backdrop-blur-md">
+            Gökyüzü algılandı {game.formatSkyBonus(game.skyBonus)}
+          </div>
         )}
 
         {mission && (

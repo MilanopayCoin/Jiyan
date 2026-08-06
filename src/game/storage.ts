@@ -204,6 +204,9 @@ export function applyFlightResult(
   }
 
   if (result.bombUsed) badges.add('sinyal-bombasi')
+  if (result.skyBonus && result.skyBonus >= 0.1 && result.outcome === 'cashed') {
+    badges.add('gokyuzu-pilotu')
+  }
 
   // Auto-unlock milestone skins (no spend) when requirements met
   const unlockedSkins = new Set(profile.unlockedSkins)
@@ -456,4 +459,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'arac-plane': 'Uçak Açıldı',
   'arac-rocket': 'Roket Açıldı',
   'sinyal-bombasi': 'Sinyal Bombası',
+  'gokyuzu-pilotu': 'Gökyüzü Pilotu',
 }

@@ -23,6 +23,11 @@ import type {
 } from './types'
 import { CRAFTS } from './vehicles'
 import { haptic } from '../utils/haptics'
+import {
+  applySkyBonus,
+  formatSkyBonus,
+  type SkySample,
+} from '../utils/skyDetect'
 
 interface GameState {
   screen: Screen
@@ -30,6 +35,7 @@ interface GameState {
   phase: FlightPhase
   layer: number
   multiplier: number
+  baseMultiplier: number
   led: LedLevel
   shaking: boolean
   flash: boolean
@@ -37,18 +43,24 @@ interface GameState {
   consecutiveSafe: number
   tipVisible: boolean
   hangarMessage: string | null
-  /** Next climb is crash-immune */
   bombArmed: boolean
-  /** Bomb was consumed this flight */
   bombUsedThisFlight: boolean
   shieldFlash: boolean
+  skyScore: number
+  skyBonus: number
+  skyActive: boolean
 }
 
 type Action =
   | { type: 'SET_SCREEN'; screen: Screen }
   | { type: 'SET_PROFILE'; profile: PlayerProfile }
   | { type: 'START_FLIGHT' }
-  | { type: 'CLIMB_SUCCESS'; layer: number; craftId: CraftId }
+  | {
+      type: 'CLIMB_SUCCESS'
+      layer: number
+      craftId: CraftId
+      skyBonus: number
+    }
   | { type: 'CRASH'; result: FlightResult }
   | { type: 'CASH_OUT'; result: FlightResult }
   | { type: 'SET_PHASE'; phase: FlightPhase }
@@ -61,6 +73,7 @@ type Action =
   | { type: 'ARM_BOMB' }
   | { type: 'CONSUME_SHIELD' }
   | { type: 'SHIELD_FLASH_OFF' }
+  | { type: 'SET_SKY'; sample: SkySample }
 
 function initialState(): GameState {
   const profile = loadProfile()
@@ -70,6 +83,7 @@ function initialState(): GameState {
     phase: 'idle',
     layer: 0,
     multiplier: 1,
+    baseMultiplier: 1,
     led: 'safe',
     shaking: false,
     flash: false,
@@ -80,6 +94,9 @@ function initialState(): GameState {
     bombArmed: false,
     bombUsedThisFlight: false,
     shieldFlash: false,
+    skyScore: 0,
+    skyBonus: 0,
+    skyActive: false,
   }
 }
 
@@ -89,6 +106,18 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, screen: action.screen, hangarMessage: null }
     case 'SET_PROFILE':
       return { ...state, profile: action.profile }
+    case 'SET_SKY': {
+      const next = {
+        ...state,
+        skyScore: action.sample.score,
+        skyBonus: action.sample.bonus,
+        skyActive: action.sample.active,
+      }
+      if (state.phase === 'climbing' && state.layer >= 1) {
+        next.multiplier = applySkyBonus(state.baseMultiplier, action.sample.bonus)
+      }
+      return next
+    }
     case 'START_FLIGHT':
       return {
         ...state,
@@ -96,6 +125,7 @@ function reducer(state: GameState, action: Action): GameState {
         phase: 'climbing',
         layer: 0,
         multiplier: 1,
+        baseMultiplier: 1,
         led: 'safe',
         shaking: false,
         flash: false,
@@ -106,11 +136,13 @@ function reducer(state: GameState, action: Action): GameState {
       }
     case 'CLIMB_SUCCESS': {
       const info = getLayerInfo(action.layer, action.craftId)
+      const boosted = applySkyBonus(info.multiplier, action.skyBonus)
       return {
         ...state,
         phase: 'climbing',
         layer: action.layer,
-        multiplier: info.multiplier,
+        baseMultiplier: info.multiplier,
+        multiplier: boosted,
         led: getLedLevel(action.layer, action.craftId),
       }
     }
@@ -146,6 +178,7 @@ function reducer(state: GameState, action: Action): GameState {
         phase: 'idle',
         layer: 0,
         multiplier: 1,
+        baseMultiplier: 1,
         led: 'safe',
         shaking: false,
         flash: false,
@@ -186,6 +219,8 @@ export function useGame() {
   const skinRef = useRef(state.profile.selectedSkin)
   const bombArmedRef = useRef(false)
   const bombUsedRef = useRef(false)
+  const skyBonusRef = useRef(0)
+  const skyActiveRef = useRef(false)
 
   useEffect(() => {
     consecutiveRef.current = state.consecutiveSafe
@@ -203,6 +238,17 @@ export function useGame() {
   useEffect(() => {
     bombUsedRef.current = state.bombUsedThisFlight
   }, [state.bombUsedThisFlight])
+
+  useEffect(() => {
+    skyBonusRef.current = state.skyBonus
+    skyActiveRef.current = state.skyActive
+  }, [state.skyBonus, state.skyActive])
+
+  const setSkySample = useCallback((sample: SkySample) => {
+    const wasActive = skyActiveRef.current
+    dispatch({ type: 'SET_SKY', sample })
+    if (!wasActive && sample.active) haptic.warn()
+  }, [])
 
   const persistResult = useCallback((result: FlightResult) => {
     const { profile, consecutiveSafe } = applyFlightResult(
@@ -239,15 +285,17 @@ export function useGame() {
     window.setTimeout(() => {
       if (rollCrash(1, craftId)) {
         const near = getLayerInfo(1, craftId)
+        const skyB = skyBonusRef.current
         const result: FlightResult = {
           outcome: 'crashed',
           layer: 0,
           multiplier: 1,
-          nearMissMultiplier: near.multiplier,
+          nearMissMultiplier: applySkyBonus(near.multiplier, skyB),
           timestamp: Date.now(),
           craftId,
           skinId,
           bombUsed: false,
+          skyBonus: skyB,
         }
         haptic.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -260,7 +308,12 @@ export function useGame() {
         }, 900)
       } else {
         haptic.climb(craftId)
-        dispatch({ type: 'CLIMB_SUCCESS', layer: 1, craftId })
+        dispatch({
+          type: 'CLIMB_SUCCESS',
+          layer: 1,
+          craftId,
+          skyBonus: skyBonusRef.current,
+        })
       }
     }, takeoffMs)
     return true
@@ -295,6 +348,7 @@ export function useGame() {
     const craftId = craftRef.current
     const skinId = skinRef.current
     const shielded = bombArmedRef.current
+    const skyB = skyBonusRef.current
     haptic.climb(craftId)
 
     const nextLayer = state.layer + 1
@@ -312,11 +366,12 @@ export function useGame() {
           outcome: 'crashed',
           layer: state.layer,
           multiplier: state.multiplier,
-          nearMissMultiplier: near.multiplier,
+          nearMissMultiplier: applySkyBonus(near.multiplier, skyB),
           timestamp: Date.now(),
           craftId,
           skinId,
           bombUsed: bombUsedRef.current,
+          skyBonus: skyB,
         }
         haptic.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -329,7 +384,12 @@ export function useGame() {
           animatingRef.current = false
         }, 1000)
       } else {
-        dispatch({ type: 'CLIMB_SUCCESS', layer: nextLayer, craftId })
+        dispatch({
+          type: 'CLIMB_SUCCESS',
+          layer: nextLayer,
+          craftId,
+          skyBonus: skyB,
+        })
         animatingRef.current = false
       }
     }, delay)
@@ -341,17 +401,19 @@ export function useGame() {
     animatingRef.current = true
     const craftId = craftRef.current
     const skinId = skinRef.current
+    const skyB = skyBonusRef.current
     haptic.land(craftId)
     const near = getLayerInfo(state.layer + 1, craftId)
     const result: FlightResult = {
       outcome: 'cashed',
       layer: state.layer,
       multiplier: state.multiplier,
-      nearMissMultiplier: near.multiplier,
+      nearMissMultiplier: applySkyBonus(near.multiplier, skyB),
       timestamp: Date.now(),
       craftId,
       skinId,
       bombUsed: bombUsedRef.current,
+      skyBonus: skyB,
     }
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
@@ -427,6 +489,11 @@ export function useGame() {
 
   const leaderboard = buildLeaderboard(state.profile)
   const activeCraft = CRAFTS[state.profile.selectedCraft]
+  const nextLayer = getLayerInfo(
+    Math.max(1, state.layer + 1),
+    state.profile.selectedCraft,
+  )
+  const previewNextMultiplier = applySkyBonus(nextLayer.multiplier, state.skyBonus)
 
   return {
     ...state,
@@ -435,6 +502,7 @@ export function useGame() {
     cashOut,
     armBomb,
     purchaseBomb,
+    setSkySample,
     goHome,
     setScreen,
     hideTip,
@@ -444,8 +512,10 @@ export function useGame() {
     buySkin,
     leaderboard,
     fmtX,
+    formatSkyBonus,
     activeCraft,
     bombCost: BOMB_CREDIT_COST,
+    previewNextMultiplier,
   }
 }
 

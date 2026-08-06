@@ -18,9 +18,13 @@ export function ResultScreen({ game }: Props) {
 
   const share = async () => {
     const craftBit = rare ? `${craft.name} (${skin.name})` : craft.name
+    const sky =
+      result.skyBonus && result.skyBonus > 0
+        ? ` gökyüzü +${Math.round(result.skyBonus * 100)}%`
+        : ''
     const text = won
-      ? `Zincir: Drone — ${craftBit} ile ${fmtX(result.multiplier)} indirdim!`
-      : `Zincir: Drone — ${craftBit} ile ${fmtX(result.nearMissMultiplier)}'e az kaldı!`
+      ? `Zincir: Drone — ${craftBit} ile ${fmtX(result.multiplier)} indirdim!${sky}`
+      : `Zincir: Drone — ${craftBit} ile ${fmtX(result.nearMissMultiplier)}'e az kaldı!${sky}`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Zincir: Drone', text, url: location.href })
@@ -84,6 +88,11 @@ export function ResultScreen({ game }: Props) {
           )}
           {won && result.bombUsed && (
             <p className="mt-2 text-xs text-amber">Sinyal bombası kullanıldı</p>
+          )}
+          {won && result.skyBonus && result.skyBonus > 0 && (
+            <p className="mt-2 text-xs text-ice">
+              Gökyüzü bonusu +{Math.round(result.skyBonus * 100)}%
+            </p>
           )}
           {won && (
             <p className="mt-4 text-sm text-ice">

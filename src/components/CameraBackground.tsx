@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { requestRearCamera, stopStream, type CameraStatus } from '../utils/camera'
+import { sampleSkyScore, skyBonusFromScore } from '../utils/skyDetect'
 
 interface Props {
   className?: string
   /** Show sky-fallback tip (home / flight only) */
   showHint?: boolean
+  /** Report live sky analysis (~2 Hz) */
+  onSkySample?: (sample: ReturnType<typeof skyBonusFromScore>) => void
 }
 
 export function CameraBackground({
   className = '',
   showHint = false,
+  onSkySample,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [status, setStatus] = useState<CameraStatus>('pending')
   const streamRef = useRef<MediaStream | null>(null)
+  const onSkyRef = useRef(onSkySample)
+  onSkyRef.current = onSkySample
 
   useEffect(() => {
     let cancelled = false
@@ -31,8 +38,11 @@ export function CameraBackground({
         try {
           await videoRef.current.play()
         } catch {
-          // Autoplay may fail until gesture; still show frame once playing
+          // Autoplay may fail until gesture
         }
+      }
+      if (s !== 'active') {
+        onSkyRef.current?.(skyBonusFromScore(0))
       }
     })()
 
@@ -42,6 +52,36 @@ export function CameraBackground({
       streamRef.current = null
     }
   }, [])
+
+  // Sample sky score while camera is live
+  useEffect(() => {
+    if (status !== 'active') return
+
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas')
+    }
+
+    let raf = 0
+    let last = 0
+    let lastReported = -1
+
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick)
+      if (t - last < 450) return
+      last = t
+      const video = videoRef.current
+      if (!video) return
+      const score = sampleSkyScore(video, canvasRef.current!)
+      const sample = skyBonusFromScore(score)
+      // Avoid noisy updates
+      if (Math.abs(sample.score - lastReported) < 0.04 && lastReported >= 0) return
+      lastReported = sample.score
+      onSkyRef.current?.(sample)
+    }
+    raf = requestAnimationFrame(tick)
+
+    return () => cancelAnimationFrame(raf)
+  }, [status])
 
   const showFallback = status === 'denied' || status === 'unavailable'
 
@@ -64,7 +104,6 @@ export function CameraBackground({
         }}
         aria-hidden
       />
-      {/* Soft cloud bands */}
       <div
         className="absolute inset-x-0 top-[18%] h-24 opacity-30 blur-2xl"
         style={{
@@ -82,10 +121,8 @@ export function CameraBackground({
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
           status === 'active' ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{ transform: 'scaleX(1)' }}
       />
 
-      {/* Subtle vignette over camera */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -97,8 +134,7 @@ export function CameraBackground({
       {showHint && showFallback && (
         <div className="pointer-events-none absolute left-1/2 top-[12%] z-10 w-[90%] max-w-sm -translate-x-1/2 text-center">
           <p className="rounded-full bg-black/40 px-4 py-2 text-xs text-fog backdrop-blur-sm">
-            Kamera kapalı — gökyüzü modu aktif. En iyi deneyim için kamerayı
-            gökyüzüne çevir.
+            Kamera kapalı — gökyüzü bonusu için kamerayı aç ve gökyüzüne çevir.
           </p>
         </div>
       )}

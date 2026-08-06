@@ -24,6 +24,7 @@ export default function App() {
     >
       <CameraBackground
         showHint={game.screen === 'home' || game.screen === 'flight'}
+        onSkySample={game.setSkySample}
       />
 
       {showCraft && (

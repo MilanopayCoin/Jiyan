@@ -39,6 +39,8 @@ export interface FlightResult {
   craftId: CraftId
   skinId: CraftSkinId
   bombUsed?: boolean
+  /** Sky bonus fraction applied (e.g. 0.15 = +15%) */
+  skyBonus?: number
 }
 
 export interface DailyMission {
