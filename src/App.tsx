@@ -53,6 +53,13 @@ export default function App() {
         />
       )}
 
+      {game.shieldFlash && (
+        <div
+          className="flash-shield pointer-events-none absolute inset-0 z-50"
+          aria-hidden
+        />
+      )}
+
       {game.screen === 'home' && <HomeScreen game={game} />}
       {game.screen === 'flight' && <FlightScreen game={game} />}
       {game.screen === 'result' && <ResultScreen game={game} />}

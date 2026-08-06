@@ -14,7 +14,7 @@ const LEGACY_KEY = 'zincir-drone-profile-v1'
 
 const DEFAULT_MISSIONS: Omit<DailyMission, 'progress' | 'completed'>[] = [
   { id: 'flights3', label: '3 uçuş yap', target: 3, rewardFlights: 1 },
-  { id: 'reach5x', label: '5x irtifayı geç', target: 1, rewardFlights: 1 },
+  { id: 'reach5x', label: '5x irtifayı geç', target: 1, rewardFlights: 1, rewardBombs: 1 },
   { id: 'safe2', label: 'Arka arkaya 2 güvenli iniş', target: 2, rewardFlights: 2 },
 ]
 
@@ -38,6 +38,8 @@ export function defaultProfile(): PlayerProfile {
     streak: 0,
     lastFlightDate: null,
     flightCredits: 12,
+    bombs: 1,
+    lastBombGrantDate: todayKey(),
     badges: ['yeni-pilot'],
     history: [],
     missions: freshMissions(),
@@ -78,6 +80,11 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
   return {
     ...base,
     ...raw,
+    bombs: typeof raw.bombs === 'number' ? raw.bombs : base.bombs,
+    lastBombGrantDate:
+      typeof raw.lastBombGrantDate === 'string' || raw.lastBombGrantDate === null
+        ? (raw.lastBombGrantDate as string | null)
+        : base.lastBombGrantDate,
     history,
     unlockedCrafts: Array.from(new Set(unlockedCrafts)) as CraftId[],
     unlockedSkins: Array.from(new Set(unlockedSkins)) as CraftSkinId[],
@@ -131,6 +138,15 @@ function reconcileStreakAndMissions(profile: PlayerProfile): PlayerProfile {
     }
   }
 
+  // Daily free signal bomb (cap 5)
+  if (next.lastBombGrantDate !== today) {
+    next = {
+      ...next,
+      bombs: Math.min(5, (next.bombs ?? 0) + 1),
+      lastBombGrantDate: today,
+    }
+  }
+
   return next
 }
 
@@ -165,6 +181,7 @@ export function applyFlightResult(
 
   let missions = profile.missions.map((m) => ({ ...m }))
   let credits = profile.flightCredits
+  let bombs = profile.bombs ?? 0
 
   missions = missions.map((m) => {
     if (m.completed) return m
@@ -181,9 +198,12 @@ export function applyFlightResult(
     const after = missions[i]
     if (after.completed && !before.completed) {
       credits += after.rewardFlights
+      bombs = Math.min(5, bombs + (after.rewardBombs ?? 0))
       badges.add(`gorev-${after.id}`)
     }
   }
+
+  if (result.bombUsed) badges.add('sinyal-bombasi')
 
   // Auto-unlock milestone skins (no spend) when requirements met
   const unlockedSkins = new Set(profile.unlockedSkins)
@@ -206,15 +226,36 @@ export function applyFlightResult(
     streak,
     lastFlightDate: today,
     flightCredits: credits,
+    bombs,
     badges: Array.from(badges),
     history: [result, ...profile.history].slice(0, 40),
     missions,
     missionDate: today,
-    unlockedSkins: Array.from(unlockedSkins),
+    unlockedSkins: Array.from(unlockedSkins) as CraftSkinId[],
   }
 
   saveProfile(next)
   return { profile: next, consecutiveSafe: consecutive }
+}
+
+export const BOMB_CREDIT_COST = 3
+
+export function buyBomb(
+  profile: PlayerProfile,
+): { ok: true; profile: PlayerProfile } | { ok: false; reason: string } {
+  if ((profile.bombs ?? 0) >= 5) {
+    return { ok: false, reason: 'Bomba stoğu dolu (max 5)' }
+  }
+  if (profile.flightCredits < BOMB_CREDIT_COST) {
+    return { ok: false, reason: `${BOMB_CREDIT_COST} pil gerekli` }
+  }
+  const next: PlayerProfile = {
+    ...profile,
+    flightCredits: profile.flightCredits - BOMB_CREDIT_COST,
+    bombs: (profile.bombs ?? 0) + 1,
+  }
+  saveProfile(next)
+  return { ok: true, profile: next }
 }
 
 export type UnlockPayWith = 'credits' | 'points'
@@ -414,4 +455,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'arac-balloon': 'Balon Açıldı',
   'arac-plane': 'Uçak Açıldı',
   'arac-rocket': 'Roket Açıldı',
+  'sinyal-bombasi': 'Sinyal Bombası',
 }

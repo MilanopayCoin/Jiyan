@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getLayerInfo, fmtX } from './math'
+import { getLayerInfo, fmtX, rollCrash } from './math'
 import {
   applyFlightResult,
+  buyBomb,
   defaultProfile,
   unlockCraft,
 } from './storage'
@@ -89,6 +90,25 @@ describe('flight result persistence', () => {
     if (res.ok) {
       expect(res.profile.unlockedCrafts).toContain('balloon')
       expect(res.profile.flightCredits).toBe(5)
+    }
+  })
+})
+
+describe('signal bomb', () => {
+  it('buyBomb spends credits and adds inventory', async () => {
+    const { buyBomb } = await import('./storage')
+    const profile = { ...defaultProfile(), flightCredits: 6, bombs: 1 }
+    const res = buyBomb(profile)
+    expect(res.ok).toBe(true)
+    if (res.ok) {
+      expect(res.profile.bombs).toBe(2)
+      expect(res.profile.flightCredits).toBe(3)
+    }
+  })
+
+  it('shielded rollCrash never crashes', () => {
+    for (let i = 0; i < 20; i++) {
+      expect(rollCrash(5, 'rocket', true)).toBe(false)
     }
   })
 })

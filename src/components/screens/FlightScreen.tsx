@@ -11,8 +11,9 @@ export function FlightScreen({ game }: Props) {
   const craftId = game.profile.selectedCraft
   const next = getLayerInfo(Math.max(1, game.layer + 1), craftId)
   const canAct = game.phase === 'climbing' && game.layer >= 1
-  const ledColor =
-    game.led === 'safe'
+  const ledColor = game.bombArmed
+    ? 'text-signal'
+    : game.led === 'safe'
       ? 'text-signal'
       : game.led === 'caution'
         ? 'text-amber'
@@ -35,19 +36,39 @@ export function FlightScreen({ game }: Props) {
             className="text-right"
           >
             <p className="text-xs uppercase tracking-[0.2em] text-fog">Çarpan</p>
-            <p className={`font-display text-[clamp(3rem,12vw,4.5rem)] leading-none ${ledColor} pulse-glow`}>
+            <p
+              className={`font-display text-[clamp(3rem,12vw,4.5rem)] leading-none ${ledColor} pulse-glow`}
+            >
               {game.layer === 0 ? '—' : fmtX(game.multiplier)}
             </p>
           </motion.div>
           <div className="text-right">
-            <p className="text-xs uppercase tracking-[0.2em] text-fog">Sinyal</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-fog">
+              {game.bombArmed ? 'Kalkan' : 'Sinyal'}
+            </p>
             <p className={`font-display text-3xl ${ledColor}`}>
-              {game.led === 'safe' ? '●' : game.led === 'caution' ? '◐' : '○'}
+              {game.bombArmed
+                ? '◈'
+                : game.led === 'safe'
+                  ? '●'
+                  : game.led === 'caution'
+                    ? '◐'
+                    : '○'}
             </p>
           </div>
         </div>
 
-        {game.layer >= 3 && (
+        {game.bombArmed && (
+          <motion.p
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 text-center text-sm font-medium text-signal"
+          >
+            Sinyal kalkanı aktif — sonraki YÜKSEL güvende
+          </motion.p>
+        )}
+
+        {!game.bombArmed && game.layer >= 3 && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.8 }}
@@ -63,7 +84,28 @@ export function FlightScreen({ game }: Props) {
       <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <p className="mb-3 text-center text-xs text-fog">
           Sonraki katman ≈ {fmtX(next.multiplier)}
+          {game.bombArmed ? ' · kalkanlı' : ''}
         </p>
+
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          disabled={!canAct || game.bombArmed || (game.profile.bombs ?? 0) <= 0}
+          onClick={() => game.armBomb()}
+          className="mb-3 w-full rounded-2xl border border-amber/40 bg-amber/15 py-3.5 backdrop-blur-md disabled:opacity-35"
+        >
+          <span className="font-display text-2xl tracking-wide text-amber">
+            SİNYAL BOMBASI
+          </span>
+          <span className="mt-0.5 block text-xs text-fog">
+            {game.bombArmed
+              ? 'Kalkan hazır'
+              : (game.profile.bombs ?? 0) > 0
+                ? `Stok ${game.profile.bombs} · sonraki yükselişi koru`
+                : 'Stok yok — hangardan al'}
+          </span>
+        </motion.button>
+
         <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
           <motion.button
             type="button"
@@ -75,7 +117,9 @@ export function FlightScreen({ game }: Props) {
             <span className="font-display text-3xl tracking-wide text-ice">
               YÜKSEL
             </span>
-            <span className="mt-1 block text-xs text-fog">Risk artır</span>
+            <span className="mt-1 block text-xs text-fog">
+              {game.bombArmed ? 'Güvenli sıçra' : 'Risk artır'}
+            </span>
           </motion.button>
           <motion.button
             type="button"

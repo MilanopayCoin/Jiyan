@@ -55,6 +55,12 @@ export function HomeScreen({ game }: Props) {
             <span className="text-xs text-fog">Puan </span>
             <span className="font-display text-xl text-ice">{points}</span>
           </div>
+          <div className="rounded-full border border-white/15 bg-black/35 px-4 py-1.5 backdrop-blur-sm">
+            <span className="text-xs text-fog">Bomba </span>
+            <span className="font-display text-xl text-amber">
+              {game.profile.bombs ?? 0}
+            </span>
+          </div>
         </div>
 
         <button

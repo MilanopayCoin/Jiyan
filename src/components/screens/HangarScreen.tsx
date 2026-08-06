@@ -31,7 +31,7 @@ export function HangarScreen({ game }: Props) {
       <h1 className="font-display text-4xl text-white">Hangar</h1>
       <p className="mt-1 text-sm text-fog">Araç seç · kilidi aç · nadir skin</p>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <div className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-sm">
           <span className="text-fog">Pil </span>
           <span className="font-display text-lg text-amber">{profile.flightCredits}</span>
@@ -40,6 +40,24 @@ export function HangarScreen({ game }: Props) {
           <span className="text-fog">Puan </span>
           <span className="font-display text-lg text-ice">{points}</span>
         </div>
+        <div className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-sm">
+          <span className="text-fog">Bomba </span>
+          <span className="font-display text-lg text-amber">{profile.bombs ?? 0}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-amber/25 bg-amber/10 px-4 py-3">
+        <p className="font-display text-xl text-amber">Sinyal Bombası</p>
+        <p className="mt-1 text-xs text-fog">
+          Uçuşta kullan → sonraki YÜKSEL düşmez. Her gün +1 (max 5).
+        </p>
+        <button
+          type="button"
+          onClick={() => game.purchaseBomb()}
+          className="mt-2 rounded-xl bg-amber/25 px-3 py-2 text-sm font-medium text-amber"
+        >
+          {game.bombCost} pil ile bomba al
+        </button>
       </div>
 
       {game.hangarMessage && (

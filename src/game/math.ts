@@ -28,7 +28,12 @@ export function getLayerInfo(
   return { layer, multiplier, crashChance }
 }
 
-export function rollCrash(layer: number, craftId: CraftId = 'drone'): boolean {
+export function rollCrash(
+  layer: number,
+  craftId: CraftId = 'drone',
+  shielded = false,
+): boolean {
+  if (shielded) return false
   const { crashChance } = getLayerInfo(layer, craftId)
   return Math.random() < crashChance
 }

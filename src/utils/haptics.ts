@@ -54,4 +54,5 @@ export const haptic = {
   crash: (craft: CraftId = 'drone') => vibrate(CRAFT_HAPTICS[craft].crash),
   warn: () => vibrate([10, 40, 10]),
   unlock: () => vibrate([20, 30, 20, 30, 60]),
+  bomb: () => vibrate([25, 20, 45, 20, 70]),
 }

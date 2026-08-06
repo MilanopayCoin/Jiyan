@@ -82,6 +82,9 @@ export function ResultScreen({ game }: Props) {
               Devam etseydin: {fmtX(result.nearMissMultiplier)} kazanacaktın
             </p>
           )}
+          {won && result.bombUsed && (
+            <p className="mt-2 text-xs text-amber">Sinyal bombası kullanıldı</p>
+          )}
           {won && (
             <p className="mt-4 text-sm text-ice">
               Bir sonraki katman {fmtX(result.nearMissMultiplier)} idi — iyi

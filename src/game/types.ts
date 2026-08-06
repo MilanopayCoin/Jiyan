@@ -38,6 +38,7 @@ export interface FlightResult {
   timestamp: number
   craftId: CraftId
   skinId: CraftSkinId
+  bombUsed?: boolean
 }
 
 export interface DailyMission {
@@ -46,6 +47,7 @@ export interface DailyMission {
   target: number
   progress: number
   rewardFlights: number
+  rewardBombs?: number
   completed: boolean
 }
 
@@ -60,6 +62,8 @@ export interface PlayerProfile {
   streak: number
   lastFlightDate: string | null
   flightCredits: number
+  bombs: number
+  lastBombGrantDate: string | null
   badges: string[]
   history: FlightResult[]
   missions: DailyMission[]

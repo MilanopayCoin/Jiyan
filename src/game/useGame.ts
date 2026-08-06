@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { fmtX, getLayerInfo, getLedLevel, rollCrash } from './math'
 import {
+  BOMB_CREDIT_COST,
   applyFlightResult,
   buildLeaderboard,
+  buyBomb,
   loadProfile,
   saveProfile,
   selectLoadout,
@@ -35,6 +37,11 @@ interface GameState {
   consecutiveSafe: number
   tipVisible: boolean
   hangarMessage: string | null
+  /** Next climb is crash-immune */
+  bombArmed: boolean
+  /** Bomb was consumed this flight */
+  bombUsedThisFlight: boolean
+  shieldFlash: boolean
 }
 
 type Action =
@@ -51,6 +58,9 @@ type Action =
   | { type: 'RESET_TO_HOME' }
   | { type: 'RENAME'; name: string }
   | { type: 'HANGAR_MSG'; message: string | null }
+  | { type: 'ARM_BOMB' }
+  | { type: 'CONSUME_SHIELD' }
+  | { type: 'SHIELD_FLASH_OFF' }
 
 function initialState(): GameState {
   const profile = loadProfile()
@@ -67,6 +77,9 @@ function initialState(): GameState {
     consecutiveSafe: 0,
     tipVisible: true,
     hangarMessage: null,
+    bombArmed: false,
+    bombUsedThisFlight: false,
+    shieldFlash: false,
   }
 }
 
@@ -87,6 +100,9 @@ function reducer(state: GameState, action: Action): GameState {
         shaking: false,
         flash: false,
         result: null,
+        bombArmed: false,
+        bombUsedThisFlight: false,
+        shieldFlash: false,
       }
     case 'CLIMB_SUCCESS': {
       const info = getLayerInfo(action.layer, action.craftId)
@@ -106,12 +122,14 @@ function reducer(state: GameState, action: Action): GameState {
         flash: true,
         result: action.result,
         led: 'critical',
+        bombArmed: false,
       }
     case 'CASH_OUT':
       return {
         ...state,
         phase: 'landing',
         result: action.result,
+        bombArmed: false,
       }
     case 'SET_PHASE':
       return { ...state, phase: action.phase }
@@ -132,6 +150,9 @@ function reducer(state: GameState, action: Action): GameState {
         shaking: false,
         flash: false,
         result: null,
+        bombArmed: false,
+        bombUsedThisFlight: false,
+        shieldFlash: false,
       }
     case 'RENAME': {
       const profile = { ...state.profile, displayName: action.name }
@@ -140,6 +161,18 @@ function reducer(state: GameState, action: Action): GameState {
     }
     case 'HANGAR_MSG':
       return { ...state, hangarMessage: action.message }
+    case 'ARM_BOMB':
+      return {
+        ...state,
+        bombArmed: true,
+        bombUsedThisFlight: true,
+        shieldFlash: true,
+        led: 'safe',
+      }
+    case 'CONSUME_SHIELD':
+      return { ...state, bombArmed: false }
+    case 'SHIELD_FLASH_OFF':
+      return { ...state, shieldFlash: false }
     default:
       return state
   }
@@ -151,6 +184,8 @@ export function useGame() {
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
   const skinRef = useRef(state.profile.selectedSkin)
+  const bombArmedRef = useRef(false)
+  const bombUsedRef = useRef(false)
 
   useEffect(() => {
     consecutiveRef.current = state.consecutiveSafe
@@ -160,6 +195,14 @@ export function useGame() {
     craftRef.current = state.profile.selectedCraft
     skinRef.current = state.profile.selectedSkin
   }, [state.profile.selectedCraft, state.profile.selectedSkin])
+
+  useEffect(() => {
+    bombArmedRef.current = state.bombArmed
+  }, [state.bombArmed])
+
+  useEffect(() => {
+    bombUsedRef.current = state.bombUsedThisFlight
+  }, [state.bombUsedThisFlight])
 
   const persistResult = useCallback((result: FlightResult) => {
     const { profile, consecutiveSafe } = applyFlightResult(
@@ -188,6 +231,8 @@ export function useGame() {
 
     haptic.tap(craftId)
     dispatch({ type: 'START_FLIGHT' })
+    bombArmedRef.current = false
+    bombUsedRef.current = false
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
 
@@ -202,6 +247,7 @@ export function useGame() {
           timestamp: Date.now(),
           craftId,
           skinId,
+          bombUsed: false,
         }
         haptic.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -220,19 +266,47 @@ export function useGame() {
     return true
   }, [persistResult])
 
+  const armBomb = useCallback(() => {
+    if (state.phase !== 'climbing' || state.layer < 1) return false
+    if (state.bombArmed) return false
+    if (animatingRef.current) return false
+
+    const profile = loadProfile()
+    if ((profile.bombs ?? 0) <= 0) return false
+
+    const spent: PlayerProfile = {
+      ...profile,
+      bombs: profile.bombs - 1,
+    }
+    saveProfile(spent)
+    dispatch({ type: 'SET_PROFILE', profile: spent })
+    dispatch({ type: 'ARM_BOMB' })
+    bombArmedRef.current = true
+    bombUsedRef.current = true
+    haptic.bomb()
+    window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
+    return true
+  }, [state.phase, state.layer, state.bombArmed])
+
   const climb = useCallback(() => {
     if (animatingRef.current) return
     if (state.phase !== 'climbing' || state.layer < 1) return
     animatingRef.current = true
     const craftId = craftRef.current
     const skinId = skinRef.current
+    const shielded = bombArmedRef.current
     haptic.climb(craftId)
 
     const nextLayer = state.layer + 1
     const delay = Math.round(350 / CRAFTS[craftId].climbVisual)
 
+    if (shielded) {
+      dispatch({ type: 'CONSUME_SHIELD' })
+      bombArmedRef.current = false
+    }
+
     window.setTimeout(() => {
-      if (rollCrash(nextLayer, craftId)) {
+      if (rollCrash(nextLayer, craftId, shielded)) {
         const near = getLayerInfo(nextLayer, craftId)
         const result: FlightResult = {
           outcome: 'crashed',
@@ -242,6 +316,7 @@ export function useGame() {
           timestamp: Date.now(),
           craftId,
           skinId,
+          bombUsed: bombUsedRef.current,
         }
         haptic.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -276,6 +351,7 @@ export function useGame() {
       timestamp: Date.now(),
       craftId,
       skinId,
+      bombUsed: bombUsedRef.current,
     }
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
@@ -337,6 +413,18 @@ export function useGame() {
     return true
   }, [])
 
+  const purchaseBomb = useCallback(() => {
+    const result = buyBomb(loadProfile())
+    if (!result.ok) {
+      dispatch({ type: 'HANGAR_MSG', message: result.reason })
+      return false
+    }
+    haptic.unlock()
+    dispatch({ type: 'SET_PROFILE', profile: result.profile })
+    dispatch({ type: 'HANGAR_MSG', message: 'Sinyal bombası eklendi!' })
+    return true
+  }, [])
+
   const leaderboard = buildLeaderboard(state.profile)
   const activeCraft = CRAFTS[state.profile.selectedCraft]
 
@@ -345,6 +433,8 @@ export function useGame() {
     startFlight,
     climb,
     cashOut,
+    armBomb,
+    purchaseBomb,
     goHome,
     setScreen,
     hideTip,
@@ -355,6 +445,7 @@ export function useGame() {
     leaderboard,
     fmtX,
     activeCraft,
+    bombCost: BOMB_CREDIT_COST,
   }
 }
 
