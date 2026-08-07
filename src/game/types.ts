@@ -93,6 +93,9 @@ export interface PlayerProfile {
   unlockedSkins: CraftSkinId[]
   selectedCraft: CraftId
   selectedSkin: CraftSkinId
+  /** Linked Phantom / Solana wallet */
+  walletAddress: string | null
+  walletVerified: boolean
 }
 
 export interface LeaderboardEntry {

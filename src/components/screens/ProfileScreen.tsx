@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { BADGE_LABELS } from '../../game/storage'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS, scorePoints } from '../../game/vehicles'
+import { WalletPanel } from '../WalletPanel'
 
 interface Props {
   game: GameApi
@@ -14,6 +15,17 @@ export function ProfileScreen({ game }: Props) {
   const skin = SKINS[profile.selectedSkin]
   const points = scorePoints(profile.totalCashed)
   const [notifHint, setNotifHint] = useState<string | null>(null)
+
+  const onLinked = useCallback(
+    (address: string, verified: boolean) => {
+      game.linkWallet(address, verified)
+    },
+    [game],
+  )
+
+  const onUnlinked = useCallback(() => {
+    game.unlinkWallet()
+  }, [game])
 
   const toggleNotif = async () => {
     if (game.notifOn) {
@@ -48,6 +60,13 @@ export function ProfileScreen({ game }: Props) {
           className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-white outline-none focus:border-signal/50"
         />
       </label>
+
+      <WalletPanel
+        linkedAddress={profile.walletAddress}
+        verified={profile.walletVerified}
+        onLinked={onLinked}
+        onUnlinked={onUnlinked}
+      />
 
       <button
         type="button"

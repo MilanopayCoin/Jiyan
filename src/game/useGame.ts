@@ -724,6 +724,33 @@ export function useGame() {
     dispatch({ type: 'RENAME', name: name.slice(0, 16) || 'Pilot' })
   }, [])
 
+  const linkWallet = useCallback((address: string, verified: boolean) => {
+    const profile = loadProfile()
+    const next: PlayerProfile = {
+      ...profile,
+      walletAddress: address,
+      walletVerified: verified,
+      badges:
+        verified && !profile.badges.includes('cuzdan-bagli')
+          ? [...profile.badges, 'cuzdan-bagli']
+          : profile.badges,
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    void pushScore(next)
+  }, [])
+
+  const unlinkWallet = useCallback(() => {
+    const profile = loadProfile()
+    const next: PlayerProfile = {
+      ...profile,
+      walletAddress: null,
+      walletVerified: false,
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
   const selectCraft = useCallback((craftId: CraftId, skinId?: CraftSkinId) => {
     const profile = selectLoadout(loadProfile(), craftId, skinId)
     craftRef.current = profile.selectedCraft
@@ -843,6 +870,8 @@ export function useGame() {
     setScreen,
     hideTip,
     rename,
+    linkWallet,
+    unlinkWallet,
     selectCraft,
     buyCraft,
     buySkin,

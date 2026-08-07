@@ -48,6 +48,8 @@ export function defaultProfile(): PlayerProfile {
     unlockedSkins: ['drone-default'],
     selectedCraft: 'drone',
     selectedSkin: 'drone-default',
+    walletAddress: null,
+    walletVerified: false,
   }
 }
 
@@ -94,6 +96,9 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
       : CRAFTS.drone.defaultSkin,
     missions: Array.isArray(raw.missions) ? (raw.missions as DailyMission[]) : base.missions,
     badges: Array.isArray(raw.badges) ? (raw.badges as string[]) : base.badges,
+    walletAddress:
+      typeof raw.walletAddress === 'string' ? raw.walletAddress : null,
+    walletVerified: Boolean(raw.walletVerified),
   }
 }
 
@@ -479,4 +484,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'gokyuzu-pilotu': 'Gökyüzü Pilotu',
   'kor-pilot': 'Kör Pilot',
   'ufo-kacis': 'Faz Kaçışı',
+  'cuzdan-bagli': 'Cüzdan Bağlı',
 }
