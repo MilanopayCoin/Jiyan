@@ -63,6 +63,12 @@ export function defaultProfile(): PlayerProfile {
     payWithCrypto: true,
     stakeAmount: ASSETS.usdt.flightStake,
     demoPackClaimed: false,
+    autoCashOut: 0,
+    checkInDate: null,
+    checkInStreak: 0,
+    referredBy: null,
+    referralClaimed: false,
+    friendMilestonesClaimed: [],
   }
 }
 
@@ -122,6 +128,23 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
       return ASSETS[asset].flightStake
     })(),
     demoPackClaimed: Boolean(raw.demoPackClaimed),
+    autoCashOut: (() => {
+      const n = Number(raw.autoCashOut)
+      return Number.isFinite(n) && n >= 0 ? n : 0
+    })(),
+    checkInDate:
+      typeof raw.checkInDate === 'string' || raw.checkInDate === null
+        ? (raw.checkInDate as string | null)
+        : null,
+    checkInStreak:
+      typeof raw.checkInStreak === 'number' && raw.checkInStreak >= 0
+        ? Math.floor(raw.checkInStreak)
+        : 0,
+    referredBy: typeof raw.referredBy === 'string' ? raw.referredBy : null,
+    referralClaimed: Boolean(raw.referralClaimed),
+    friendMilestonesClaimed: Array.isArray(raw.friendMilestonesClaimed)
+      ? (raw.friendMilestonesClaimed as number[]).filter((n) => typeof n === 'number')
+      : [],
   }
 }
 
@@ -509,4 +532,9 @@ export const BADGE_LABELS: Record<string, string> = {
   'ufo-kacis': 'Faz Kaçışı',
   'cuzdan-bagli': 'Cüzdan Bağlı',
   'cuzdan-acildi': 'Kripto Cüzdan',
+  'checkin-pilot': 'Check-in Pilotu',
+  'checkin-7': '7 Gün Seri',
+  'davet-geldi': 'Davetle Geldi',
+  'sosyal-pilot': 'Sosyal Pilot',
+  'filo-davet': 'Davet Filosu',
 }

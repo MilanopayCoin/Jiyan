@@ -66,6 +66,14 @@ import {
   stakeForFlight,
   withdrawAsset,
 } from './walletOps'
+import {
+  AUTO_CASH_PRESETS,
+  canCheckIn,
+  claimCheckIn,
+  claimFriendMilestones,
+  claimReferralJoin,
+  previewCheckIn,
+} from './retention'
 import { haptic } from '../utils/haptics'
 import { sfx } from '../utils/audio'
 import {
@@ -327,6 +335,7 @@ export function useGame() {
   const [dailyBoard, setDailyBoard] = useState<FriendCard[]>([])
   const [remoteTop, setRemoteTop] = useState<FriendCard[]>([])
   const [syncHint, setSyncHint] = useState<string | null>(null)
+  const [retentionHint, setRetentionHint] = useState<string | null>(null)
   const consecutiveRef = useRef(state.consecutiveSafe)
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
@@ -341,6 +350,7 @@ export function useGame() {
   const rngRef = useRef<() => number>(Math.random)
   const stakeAssetRef = useRef<AssetId | null>(null)
   const stakeAmountRef = useRef(0)
+  const cashOutRef = useRef<() => void>(() => {})
 
   const refreshSync = useCallback(async () => {
     const local = loadFriends()
@@ -361,7 +371,25 @@ export function useGame() {
   useEffect(() => {
     getOrCreatePilotId()
     const imported = consumeFriendFromUrl()
-    if (imported) setFriends(loadFriends())
+    if (imported) {
+      setFriends(loadFriends())
+      const profile = loadProfile()
+      const joined = claimReferralJoin(profile, imported.id)
+      if (joined.ok) {
+        saveProfile(joined.profile)
+        dispatch({ type: 'SET_PROFILE', profile: joined.profile })
+        setRetentionHint(joined.message)
+        window.setTimeout(() => setRetentionHint(null), 4000)
+      }
+      const milestone = claimFriendMilestones(
+        loadProfile(),
+        loadFriends().length,
+      )
+      if (milestone?.ok) {
+        saveProfile(milestone.profile)
+        dispatch({ type: 'SET_PROFILE', profile: milestone.profile })
+      }
+    }
     void maybeStreakReminder({
       streak: state.profile.streak,
       lastFlightDate: state.profile.lastFlightDate,
@@ -394,6 +422,16 @@ export function useGame() {
     skyBonusRef.current = state.skyBonus
     skyActiveRef.current = state.skyActive
   }, [state.skyBonus, state.skyActive])
+
+  // Auto cash-out when multiplier hits target
+  useEffect(() => {
+    if (state.phase !== 'climbing' || state.layer < 1) return
+    const target = state.profile.autoCashOut
+    if (!target || target <= 0) return
+    if (state.multiplier + 1e-9 < target) return
+    const t = window.setTimeout(() => cashOutRef.current(), 320)
+    return () => window.clearTimeout(t)
+  }, [state.phase, state.layer, state.multiplier, state.profile.autoCashOut])
 
   const setSkySample = useCallback((sample: SkySample) => {
     const wasActive = skyActiveRef.current
@@ -468,7 +506,15 @@ export function useGame() {
   const addFriend = useCallback((card: FriendCard) => {
     const me = getOrCreatePilotId()
     if (card.id === me) return false
-    setFriends(upsertFriend(card, me))
+    const list = upsertFriend(card, me)
+    setFriends(list)
+    const milestone = claimFriendMilestones(loadProfile(), list.length)
+    if (milestone?.ok) {
+      saveProfile(milestone.profile)
+      dispatch({ type: 'SET_PROFILE', profile: milestone.profile })
+      setRetentionHint(milestone.message)
+      window.setTimeout(() => setRetentionHint(null), 3500)
+    }
     return true
   }, [])
 
@@ -789,6 +835,34 @@ export function useGame() {
     }, 900)
   }, [state.phase, state.layer, state.multiplier, persistResult])
 
+  cashOutRef.current = cashOut
+
+  const setAutoCashOut = useCallback((x: number) => {
+    const allowed = AUTO_CASH_PRESETS as readonly number[]
+    const profile = loadProfile()
+    const next: PlayerProfile = {
+      ...profile,
+      autoCashOut: allowed.includes(x) ? x : 0,
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
+  const doCheckIn = useCallback(() => {
+    const res = claimCheckIn(loadProfile())
+    if (!res.ok) {
+      setRetentionHint(res.error)
+      window.setTimeout(() => setRetentionHint(null), 2500)
+      return false
+    }
+    saveProfile(res.profile)
+    dispatch({ type: 'SET_PROFILE', profile: res.profile })
+    setRetentionHint(res.message)
+    haptic.unlock()
+    window.setTimeout(() => setRetentionHint(null), 3500)
+    return true
+  }, [])
+
   const goHome = useCallback(() => {
     haptic.tap(craftRef.current)
     sfx.stopProp()
@@ -1038,6 +1112,11 @@ export function useGame() {
     disableNotifications,
     refreshSync,
     shareDaily,
+    setAutoCashOut,
+    doCheckIn,
+    canCheckInToday: canCheckIn(state.profile),
+    checkInPreview: previewCheckIn(state.profile),
+    retentionHint,
     notifOn,
     notifPermission: notifPermission(),
     dailyBest,

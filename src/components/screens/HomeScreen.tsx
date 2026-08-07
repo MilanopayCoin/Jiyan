@@ -6,6 +6,7 @@ import { InstallBanner } from '../InstallBanner'
 import { fmtX } from '../../game/math'
 import { ASSETS, formatAsset, normalizeBalances } from '../../game/assets'
 import { canStakeCrypto } from '../../game/walletOps'
+import { AUTO_CASH_PRESETS, approxUsd, formatAutoCash } from '../../game/retention'
 
 interface Props {
   game: GameApi
@@ -31,6 +32,7 @@ export function HomeScreen({ game }: Props) {
   const skin = SKINS[game.profile.selectedSkin]
   const points = scorePoints(game.profile.totalCashed)
   const bal = normalizeBalances(game.profile.balances)[payAsset]
+  const checkPreview = game.checkInPreview
 
   return (
     <div className="relative z-20 flex h-full flex-col">
@@ -131,6 +133,10 @@ export function HomeScreen({ game }: Props) {
       <div className="px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <InstallBanner />
 
+        {game.retentionHint && (
+          <p className="mb-3 text-center text-sm text-signal">{game.retentionHint}</p>
+        )}
+
         {game.tipVisible && (
           <motion.button
             type="button"
@@ -148,6 +154,27 @@ export function HomeScreen({ game }: Props) {
             Gökyüzü algılandı {game.formatSkyBonus(game.skyBonus)}
           </div>
         )}
+
+        <button
+          type="button"
+          disabled={!game.canCheckInToday}
+          onClick={() => game.doCheckIn()}
+          className="mb-3 flex w-full items-center justify-between rounded-2xl border border-signal/35 bg-signal/10 px-4 py-3 text-left backdrop-blur-md disabled:opacity-45"
+        >
+          <div>
+            <p className="text-xs uppercase tracking-wider text-signal">
+              Günlük check-in
+            </p>
+            <p className="mt-0.5 text-sm text-white">
+              {game.canCheckInToday
+                ? `Gün ${checkPreview.day}: ${checkPreview.label}`
+                : `Alındı · seri ${game.profile.checkInStreak}`}
+            </p>
+          </div>
+          <span className="font-display text-lg text-signal">
+            {game.canCheckInToday ? 'AL' : '✓'}
+          </span>
+        </button>
 
         {mission && (
           <div className="mb-4 rounded-2xl border border-white/10 bg-panel px-4 py-3 backdrop-blur-md">
@@ -172,6 +199,28 @@ export function HomeScreen({ game }: Props) {
 
         <p className="mb-2 text-center text-xs text-fog">{craft.riskLabel}</p>
 
+        <div className="mb-3">
+          <p className="mb-1.5 text-center text-[10px] uppercase tracking-wider text-fog">
+            Auto cash-out · {formatAutoCash(game.profile.autoCashOut)}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {AUTO_CASH_PRESETS.map((x) => (
+              <button
+                key={x}
+                type="button"
+                onClick={() => game.setAutoCashOut(x)}
+                className={`rounded-full px-2.5 py-1 text-xs ${
+                  Math.abs(game.profile.autoCashOut - x) < 1e-9
+                    ? 'bg-ice/25 text-ice'
+                    : 'border border-white/15 text-fog'
+                }`}
+              >
+                {x === 0 ? 'Kapalı' : `${x}x`}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {game.profile.payWithCrypto && (
           <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
             {ASSETS[payAsset].stakes.slice(0, 4).map((s) => (
@@ -186,6 +235,7 @@ export function HomeScreen({ game }: Props) {
                 }`}
               >
                 {formatAsset(s, payAsset)}
+                <span className="ml-1 opacity-60">{approxUsd(s, payAsset)}</span>
               </button>
             ))}
           </div>

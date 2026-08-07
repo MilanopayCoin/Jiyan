@@ -109,6 +109,16 @@ export interface PlayerProfile {
   /** Selected stake amount in payAsset units */
   stakeAmount: number
   demoPackClaimed: boolean
+  /** Auto cash-out target multiplier; 0 = off */
+  autoCashOut: number
+  /** Last daily check-in date YYYY-MM-DD */
+  checkInDate: string | null
+  checkInStreak: number
+  /** Pilot id who invited this player */
+  referredBy: string | null
+  referralClaimed: boolean
+  /** Friend-count milestones already paid */
+  friendMilestonesClaimed: number[]
 }
 
 export interface LeaderboardEntry {

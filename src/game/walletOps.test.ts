@@ -38,6 +38,12 @@ function baseProfile(over: Partial<PlayerProfile> = {}): PlayerProfile {
     payWithCrypto: true,
     stakeAmount: ASSETS.usdt.flightStake,
     demoPackClaimed: false,
+    autoCashOut: 0,
+    checkInDate: null,
+    checkInStreak: 0,
+    referredBy: null,
+    referralClaimed: false,
+    friendMilestonesClaimed: [],
     ...over,
   }
 }
