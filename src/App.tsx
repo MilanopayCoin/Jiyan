@@ -44,6 +44,9 @@ export default function App() {
       <CameraBackground
         showHint={game.screen === 'home' || game.screen === 'flight'}
         onSkySample={game.setSkySample}
+        blinded={
+          game.screen === 'flight' && game.blindMode && game.layer >= 3
+        }
       />
 
       {showCraft && (
@@ -60,7 +63,11 @@ export default function App() {
                     : 'idle'
                 : game.phase
           }
-          led={game.screen === 'home' ? 'safe' : game.led}
+          led={
+            game.screen === 'home'
+              ? 'safe'
+              : game.displayLed
+          }
           craftId={game.profile.selectedCraft}
           skinId={game.profile.selectedSkin}
           tiltX={tilt.allowed ? tilt.x : 0}

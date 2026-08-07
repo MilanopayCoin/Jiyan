@@ -111,6 +111,9 @@ const PROP_BASE: Record<CraftId, number> = {
   plane: 70,
   rocket: 45,
   balloon: 55,
+  kite: 65,
+  ufo: 40,
+  paper: 75,
 }
 
 export function startPropeller(craft: CraftId = 'drone'): void {

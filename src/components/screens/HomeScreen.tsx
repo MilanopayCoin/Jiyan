@@ -14,6 +14,9 @@ const ICONS: Record<CraftId, string> = {
   plane: '✈',
   rocket: '▲',
   balloon: '○',
+  kite: '◇',
+  ufo: '◎',
+  paper: '△',
 }
 
 export function HomeScreen({ game }: Props) {
@@ -146,7 +149,15 @@ export function HomeScreen({ game }: Props) {
               onClick={() => game.startFlight({ challenge: true })}
               className="flex-1 rounded-xl bg-amber/25 py-2.5 text-sm font-semibold text-amber disabled:opacity-40"
             >
-              Challenge KALKIŞ
+              Challenge
+            </button>
+            <button
+              type="button"
+              disabled={noCredits}
+              onClick={() => game.startFlight({ blind: true })}
+              className="flex-1 rounded-xl bg-ice/20 py-2.5 text-sm font-semibold text-ice disabled:opacity-40"
+            >
+              Kör Uçuş
             </button>
             <button
               type="button"

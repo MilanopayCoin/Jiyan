@@ -8,12 +8,15 @@ interface Props {
   showHint?: boolean
   /** Report live sky analysis (~2 Hz) */
   onSkySample?: (sample: ReturnType<typeof skyBonusFromScore>) => void
+  /** Blind flight: crush camera visibility */
+  blinded?: boolean
 }
 
 export function CameraBackground({
   className = '',
   showHint = false,
   onSkySample,
+  blinded = false,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -120,7 +123,7 @@ export function CameraBackground({
         autoPlay
         data-share-video
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
-          status === 'active' ? 'opacity-100' : 'opacity-0'
+          status === 'active' && !blinded ? 'opacity-100' : 'opacity-0'
         }`}
       />
 
@@ -131,6 +134,17 @@ export function CameraBackground({
             'radial-gradient(ellipse at center, transparent 40%, rgba(3,8,14,0.55) 100%)',
         }}
       />
+
+      {blinded && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] transition-opacity duration-500"
+          style={{
+            background:
+              'radial-gradient(circle at 50% 40%, rgba(10,20,35,0.55), rgba(2,4,8,0.96) 70%), repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(125,211,252,0.03) 3px)',
+          }}
+          aria-hidden
+        />
+      )}
 
       {showHint && showFallback && (
         <div className="pointer-events-none absolute left-1/2 top-[12%] z-10 w-[90%] max-w-sm -translate-x-1/2 text-center">

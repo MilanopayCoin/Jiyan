@@ -45,6 +45,24 @@ const CRAFT_HAPTICS: Record<
     land: [20, 50, 40],
     crash: [15, 60, 15, 60, 90],
   },
+  kite: {
+    tap: 10,
+    climb: [8, 25, 8, 25, 8],
+    land: [15, 40, 60],
+    crash: [20, 30, 20, 30, 20, 100],
+  },
+  ufo: {
+    tap: 16,
+    climb: [30, 20, 30],
+    land: [40, 20, 40, 80],
+    crash: [50, 40, 50, 40, 140],
+  },
+  paper: {
+    tap: 6,
+    climb: [10, 35, 10],
+    land: [25, 45, 35],
+    crash: [12, 50, 12, 80],
+  },
 }
 
 export const haptic = {

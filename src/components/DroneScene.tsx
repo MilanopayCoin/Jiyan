@@ -286,6 +286,139 @@ function createBalloon(skinId: CraftSkinId): CraftParts {
   return { group, props, leds }
 }
 
+function createKite(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const sail = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.7, 4), bodyMat)
+  sail.rotation.x = Math.PI
+  sail.position.y = 0.15
+  group.add(sail)
+
+  const spar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.03, 0.03), accentMat)
+  spar.position.y = 0.05
+  group.add(spar)
+
+  const tail = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.55, 0.02),
+    accentMat,
+  )
+  tail.position.set(0, -0.45, 0)
+  tail.userData.spinDir = 1
+  tail.userData.pulse = true
+  group.add(tail)
+  props.push(tail)
+
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 10, 10),
+    new THREE.MeshStandardMaterial({
+      color: LED_COLORS.safe,
+      emissive: LED_COLORS.safe,
+      emissiveIntensity: 1.4,
+    }),
+  )
+  led.position.set(0, 0.2, 0.08)
+  group.add(led)
+  leds.push(led)
+
+  return { group, props, leds }
+}
+
+function createUfo(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const disc = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    bodyMat,
+  )
+  disc.scale.set(1, 0.35, 1)
+  group.add(disc)
+
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    accentMat,
+  )
+  dome.position.y = 0.12
+  group.add(dome)
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.42, 0.04, 8, 28),
+    accentMat,
+  )
+  ring.rotation.x = Math.PI / 2
+  ring.position.y = -0.02
+  ring.userData.spinDir = 1
+  group.add(ring)
+  props.push(ring)
+
+  ;[0, 1, 2, 3].forEach((i) => {
+    const a = (i / 4) * Math.PI * 2
+    const led = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: LED_COLORS.safe,
+        emissive: LED_COLORS.safe,
+        emissiveIntensity: 1.6,
+      }),
+    )
+    led.position.set(Math.cos(a) * 0.38, -0.05, Math.sin(a) * 0.38)
+    group.add(led)
+    leds.push(led)
+  })
+
+  return { group, props, leds }
+}
+
+function createPaper(skinId: CraftSkinId): CraftParts {
+  const { bodyMat, accentMat } = mats(skinId)
+  const group = new THREE.Group()
+  const props: THREE.Mesh[] = []
+  const leds: THREE.Mesh[] = []
+
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.02, 0.35), bodyMat)
+  wing.position.y = 0.02
+  group.add(wing)
+
+  const fold = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.5), accentMat)
+  fold.rotation.x = Math.PI / 2
+  fold.position.set(0, 0.04, 0)
+  group.add(fold)
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), bodyMat)
+  nose.rotation.z = -Math.PI / 2
+  nose.position.set(0.45, 0.02, 0)
+  group.add(nose)
+
+  const flutter = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.01, 0.08),
+    accentMat,
+  )
+  flutter.position.set(-0.4, 0.02, 0.12)
+  flutter.userData.spinDir = 1
+  flutter.userData.pulse = true
+  group.add(flutter)
+  props.push(flutter)
+
+  const led = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 8, 8),
+    new THREE.MeshStandardMaterial({
+      color: LED_COLORS.safe,
+      emissive: LED_COLORS.safe,
+      emissiveIntensity: 1.2,
+    }),
+  )
+  led.position.set(0.2, 0.06, 0)
+  group.add(led)
+  leds.push(led)
+
+  return { group, props, leds }
+}
+
 function createCraft(craftId: CraftId, skinId: CraftSkinId): CraftParts {
   switch (craftId) {
     case 'plane':
@@ -294,6 +427,12 @@ function createCraft(craftId: CraftId, skinId: CraftSkinId): CraftParts {
       return createRocket(skinId)
     case 'balloon':
       return createBalloon(skinId)
+    case 'kite':
+      return createKite(skinId)
+    case 'ufo':
+      return createUfo(skinId)
+    case 'paper':
+      return createPaper(skinId)
     default:
       return createDrone(skinId)
   }
@@ -456,11 +595,17 @@ export function DroneScene({
       } else if (P === 'climbing' || P === 'done') {
         targetScale = Math.max(0.18, 1 - L * 0.09 * Math.min(visual, 1.3))
         targetY = 0.15 + L * 0.22 * visual
-        // Altitude wind grows with layer — stronger sway / turbulence
-        windAmp = Math.min(0.22, L * 0.028 + (ledLevel === 'critical' ? 0.04 : 0))
+        // Altitude wind grows with layer — kite feels the wind hardest
+        const kiteBoost = cid === 'kite' || cid === 'paper' ? 0.06 : 0
+        windAmp = Math.min(
+          0.28,
+          L * 0.028 + kiteBoost + (ledLevel === 'critical' ? 0.04 : 0),
+        )
       }
 
-      const tiltAmp = P === 'climbing' || P === 'idle' ? 1 : 0.35
+      const tiltAmp =
+        (P === 'climbing' || P === 'idle' ? 1 : 0.35) *
+        (cid === 'kite' ? 1.55 : cid === 'paper' ? 1.35 : 1)
 
       if (P === 'crashing') {
         crashT += 0.04

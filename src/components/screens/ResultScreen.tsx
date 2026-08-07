@@ -58,13 +58,17 @@ export function ResultScreen({ game }: Props) {
           }}
         >
           <p className="font-display text-sm tracking-[0.3em] text-fog">
-            {result.challenge
+            {result.blind
               ? won
-                ? 'CHALLENGE İNİŞ'
-                : 'CHALLENGE DÜŞÜŞ'
-              : won
-                ? 'GÜVENLİ İNİŞ'
-                : 'SİNYAL KESİLDİ'}
+                ? 'KÖR İNİŞ'
+                : 'KÖR DÜŞÜŞ'
+              : result.challenge
+                ? won
+                  ? 'CHALLENGE İNİŞ'
+                  : 'CHALLENGE DÜŞÜŞ'
+                : won
+                  ? 'GÜVENLİ İNİŞ'
+                  : 'SİNYAL KESİLDİ'}
           </p>
           <p className="mt-1 text-sm text-ice">
             {craft.name}

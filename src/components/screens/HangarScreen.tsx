@@ -12,6 +12,7 @@ const TONE: Record<RiskTone, string> = {
   safe: 'text-signal',
   balanced: 'text-amber',
   wild: 'text-danger',
+  trick: 'text-signal',
 }
 
 const ICONS: Record<CraftId, string> = {
@@ -19,6 +20,9 @@ const ICONS: Record<CraftId, string> = {
   plane: '✈',
   rocket: '▲',
   balloon: '○',
+  kite: '◇',
+  ufo: '◎',
+  paper: '△',
 }
 
 export function HangarScreen({ game }: Props) {

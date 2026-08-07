@@ -14,6 +14,20 @@ import {
   pushScore,
 } from '../utils/syncApi'
 import { requestTiltPermission } from '../utils/tilt'
+
+function pickBluffLed(
+  craftId: CraftId,
+  layer: number,
+  real: LedLevel,
+): LedLevel | null {
+  if (craftId !== 'ufo' || layer < 3) return null
+  // ~40% chance to lie about the LED
+  if (Math.random() > 0.4) return null
+  const options: LedLevel[] = ['safe', 'caution', 'critical'].filter(
+    (l) => l !== real,
+  ) as LedLevel[]
+  return options[Math.floor(Math.random() * options.length)] ?? null
+}
 import {
   BOMB_CREDIT_COST,
   applyFlightResult,
@@ -84,17 +98,22 @@ interface GameState {
   skyBonus: number
   skyActive: boolean
   challengeMode: boolean
+  blindMode: boolean
+  /** UFO may show a lying LED */
+  bluffLed: LedLevel | null
+  ufoShieldReady: boolean
 }
 
 type Action =
   | { type: 'SET_SCREEN'; screen: Screen }
   | { type: 'SET_PROFILE'; profile: PlayerProfile }
-  | { type: 'START_FLIGHT'; challenge: boolean }
+  | { type: 'START_FLIGHT'; challenge: boolean; blind: boolean }
   | {
       type: 'CLIMB_SUCCESS'
       layer: number
       craftId: CraftId
       skyBonus: number
+      bluffLed: LedLevel | null
     }
   | { type: 'CRASH'; result: FlightResult }
   | { type: 'CASH_OUT'; result: FlightResult }
@@ -109,6 +128,7 @@ type Action =
   | { type: 'HANGAR_MSG'; message: string | null }
   | { type: 'ARM_BOMB' }
   | { type: 'CONSUME_SHIELD' }
+  | { type: 'CONSUME_UFO_SHIELD' }
   | { type: 'SHIELD_FLASH_OFF' }
   | { type: 'SET_SKY'; sample: SkySample }
 
@@ -136,6 +156,9 @@ function initialState(): GameState {
     skyBonus: 0,
     skyActive: false,
     challengeMode: false,
+    blindMode: false,
+    bluffLed: null,
+    ufoShieldReady: false,
   }
 }
 
@@ -146,17 +169,14 @@ function reducer(state: GameState, action: Action): GameState {
     case 'SET_PROFILE':
       return { ...state, profile: action.profile }
     case 'SET_SKY': {
+      const fairLock = state.challengeMode || state.blindMode
       const next = {
         ...state,
         skyScore: action.sample.score,
-        skyBonus: state.challengeMode ? 0 : action.sample.bonus,
-        skyActive: state.challengeMode ? false : action.sample.active,
+        skyBonus: fairLock ? 0 : action.sample.bonus,
+        skyActive: fairLock ? false : action.sample.active,
       }
-      if (
-        !state.challengeMode &&
-        state.phase === 'climbing' &&
-        state.layer >= 1
-      ) {
+      if (!fairLock && state.phase === 'climbing' && state.layer >= 1) {
         next.multiplier = applySkyBonus(state.baseMultiplier, action.sample.bonus)
       }
       return next
@@ -178,12 +198,16 @@ function reducer(state: GameState, action: Action): GameState {
         bombUsedThisFlight: false,
         shieldFlash: false,
         challengeMode: action.challenge,
-        skyBonus: action.challenge ? 0 : state.skyBonus,
-        skyActive: action.challenge ? false : state.skyActive,
+        blindMode: action.blind,
+        bluffLed: null,
+        ufoShieldReady: state.profile.selectedCraft === 'ufo',
+        skyBonus: action.challenge || action.blind ? 0 : state.skyBonus,
+        skyActive: action.challenge || action.blind ? false : state.skyActive,
       }
     case 'CLIMB_SUCCESS': {
       const info = getLayerInfo(action.layer, action.craftId)
-      const sky = state.challengeMode ? 0 : action.skyBonus
+      const sky =
+        state.challengeMode || state.blindMode ? 0 : action.skyBonus
       const boosted = applySkyBonus(info.multiplier, sky)
       return {
         ...state,
@@ -192,6 +216,7 @@ function reducer(state: GameState, action: Action): GameState {
         baseMultiplier: info.multiplier,
         multiplier: boosted,
         led: getLedLevel(action.layer, action.craftId),
+        bluffLed: action.bluffLed,
       }
     }
     case 'CRASH':
@@ -242,6 +267,9 @@ function reducer(state: GameState, action: Action): GameState {
         bombUsedThisFlight: false,
         shieldFlash: false,
         challengeMode: false,
+        blindMode: false,
+        bluffLed: null,
+        ufoShieldReady: false,
       }
     case 'RENAME': {
       const profile = { ...state.profile, displayName: action.name }
@@ -260,6 +288,14 @@ function reducer(state: GameState, action: Action): GameState {
       }
     case 'CONSUME_SHIELD':
       return { ...state, bombArmed: false }
+    case 'CONSUME_UFO_SHIELD':
+      return {
+        ...state,
+        ufoShieldReady: false,
+        shieldFlash: true,
+        bluffLed: null,
+        led: 'safe',
+      }
     case 'SHIELD_FLASH_OFF':
       return { ...state, shieldFlash: false }
     default:
@@ -284,6 +320,8 @@ export function useGame() {
   const skyBonusRef = useRef(0)
   const skyActiveRef = useRef(false)
   const challengeRef = useRef(false)
+  const blindRef = useRef(false)
+  const ufoShieldRef = useRef(false)
   const rngRef = useRef<() => number>(Math.random)
 
   const refreshSync = useCallback(async () => {
@@ -409,14 +447,17 @@ export function useGame() {
     setNotifOn(false)
   }, [])
 
-  const startFlight = useCallback((opts?: { challenge?: boolean }) => {
+  const startFlight = useCallback((opts?: { challenge?: boolean; blind?: boolean }) => {
     const profile = loadProfile()
     if (profile.flightCredits <= 0) return false
 
     const craftId = profile.selectedCraft
     const skinId = profile.selectedSkin
     const challenge = Boolean(opts?.challenge)
+    const blind = Boolean(opts?.blind) && !challenge
     challengeRef.current = challenge
+    blindRef.current = blind
+    ufoShieldRef.current = craftId === 'ufo'
     rngRef.current = challenge
       ? createRng(dailyChallengeSeed(todayKey(), craftId))
       : Math.random
@@ -432,18 +473,38 @@ export function useGame() {
     void requestTiltPermission()
     haptic.tap(craftId)
     sfx.climb(craftId)
-    dispatch({ type: 'START_FLIGHT', challenge })
+    dispatch({ type: 'START_FLIGHT', challenge, blind })
     bombArmedRef.current = false
     bombUsedRef.current = false
     sfx.startProp(craftId)
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
+    const fairLock = () => challengeRef.current || blindRef.current
 
     window.setTimeout(() => {
       const rng = rngRef.current
       if (rollCrash(1, craftId, false, rng)) {
+        // UFO phase shield can absorb even takeoff crash
+        if (ufoShieldRef.current) {
+          ufoShieldRef.current = false
+          dispatch({ type: 'CONSUME_UFO_SHIELD' })
+          window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
+          haptic.bomb()
+          sfx.bomb()
+          haptic.climb(craftId)
+          sfx.setPropLayer(1, craftId)
+          const real = getLedLevel(1, craftId)
+          dispatch({
+            type: 'CLIMB_SUCCESS',
+            layer: 1,
+            craftId,
+            skyBonus: fairLock() ? 0 : skyBonusRef.current,
+            bluffLed: pickBluffLed(craftId, 1, real),
+          })
+          return
+        }
         const near = getLayerInfo(1, craftId)
-        const skyB = challengeRef.current ? 0 : skyBonusRef.current
+        const skyB = fairLock() ? 0 : skyBonusRef.current
         const result: FlightResult = {
           outcome: 'crashed',
           layer: 0,
@@ -455,6 +516,7 @@ export function useGame() {
           bombUsed: false,
           skyBonus: skyB,
           challenge: challengeRef.current,
+          blind: blindRef.current,
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -469,11 +531,13 @@ export function useGame() {
       } else {
         haptic.climb(craftId)
         sfx.setPropLayer(1, craftId)
+        const real = getLedLevel(1, craftId)
         dispatch({
           type: 'CLIMB_SUCCESS',
           layer: 1,
           craftId,
-          skyBonus: challengeRef.current ? 0 : skyBonusRef.current,
+          skyBonus: fairLock() ? 0 : skyBonusRef.current,
+          bluffLed: pickBluffLed(craftId, 1, real),
         })
       }
     }, takeoffMs)
@@ -481,7 +545,8 @@ export function useGame() {
   }, [persistResult])
 
   const armBomb = useCallback(() => {
-    if (state.challengeMode || challengeRef.current) return false
+    if (state.challengeMode || state.blindMode || challengeRef.current || blindRef.current)
+      return false
     if (state.phase !== 'climbing' || state.layer < 1) return false
     if (state.bombArmed) return false
     if (animatingRef.current) return false
@@ -502,7 +567,13 @@ export function useGame() {
     sfx.bomb()
     window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
     return true
-  }, [state.phase, state.layer, state.bombArmed, state.challengeMode])
+  }, [
+    state.phase,
+    state.layer,
+    state.bombArmed,
+    state.challengeMode,
+    state.blindMode,
+  ])
 
   const climb = useCallback(() => {
     if (animatingRef.current) return
@@ -511,8 +582,10 @@ export function useGame() {
     const craftId = craftRef.current
     const skinId = skinRef.current
     const challenge = challengeRef.current
-    const shielded = challenge ? false : bombArmedRef.current
-    const skyB = challenge ? 0 : skyBonusRef.current
+    const blind = blindRef.current
+    const fairLock = challenge || blind
+    const shielded = fairLock ? false : bombArmedRef.current
+    const skyB = fairLock ? 0 : skyBonusRef.current
     void sfx.unlock()
     haptic.climb(craftId)
     sfx.climb(craftId)
@@ -533,6 +606,24 @@ export function useGame() {
 
     window.setTimeout(() => {
       if (rollCrash(nextLayer, craftId, shielded, rngRef.current)) {
+        if (ufoShieldRef.current) {
+          ufoShieldRef.current = false
+          dispatch({ type: 'CONSUME_UFO_SHIELD' })
+          window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
+          haptic.bomb()
+          sfx.bomb()
+          sfx.setPropLayer(nextLayer, craftId)
+          const real = getLedLevel(nextLayer, craftId)
+          dispatch({
+            type: 'CLIMB_SUCCESS',
+            layer: nextLayer,
+            craftId,
+            skyBonus: skyB,
+            bluffLed: pickBluffLed(craftId, nextLayer, real),
+          })
+          animatingRef.current = false
+          return
+        }
         const near = getLayerInfo(nextLayer, craftId)
         const result: FlightResult = {
           outcome: 'crashed',
@@ -545,6 +636,7 @@ export function useGame() {
           bombUsed: bombUsedRef.current,
           skyBonus: skyB,
           challenge,
+          blind,
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -566,6 +658,7 @@ export function useGame() {
           layer: nextLayer,
           craftId,
           skyBonus: skyB,
+          bluffLed: pickBluffLed(craftId, nextLayer, led),
         })
         animatingRef.current = false
       }
@@ -579,7 +672,9 @@ export function useGame() {
     const craftId = craftRef.current
     const skinId = skinRef.current
     const challenge = challengeRef.current
-    const skyB = challenge ? 0 : skyBonusRef.current
+    const blind = blindRef.current
+    const fairLock = challenge || blind
+    const skyB = fairLock ? 0 : skyBonusRef.current
     haptic.land(craftId)
     sfx.land(craftId)
     const near = getLayerInfo(state.layer + 1, craftId)
@@ -594,6 +689,8 @@ export function useGame() {
       bombUsed: bombUsedRef.current,
       skyBonus: skyB,
       challenge,
+      blind,
+      ufoShieldUsed: craftId === 'ufo' && !ufoShieldRef.current,
     }
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
@@ -711,8 +808,10 @@ export function useGame() {
   )
   const previewNextMultiplier = applySkyBonus(
     nextLayer.multiplier,
-    state.challengeMode ? 0 : state.skyBonus,
+    state.challengeMode || state.blindMode ? 0 : state.skyBonus,
   )
+
+  const displayLed = state.bluffLed ?? state.led
 
   const shareDaily = useCallback(async () => {
     const best = loadDailyBest()
@@ -765,6 +864,7 @@ export function useGame() {
     activeCraft,
     bombCost: BOMB_CREDIT_COST,
     previewNextMultiplier,
+    displayLed,
   }
 }
 

@@ -12,7 +12,14 @@ export type LedLevel = 'safe' | 'caution' | 'critical'
 
 export type Outcome = 'cashed' | 'crashed'
 
-export type CraftId = 'drone' | 'plane' | 'rocket' | 'balloon'
+export type CraftId =
+  | 'drone'
+  | 'plane'
+  | 'rocket'
+  | 'balloon'
+  | 'kite'
+  | 'ufo'
+  | 'paper'
 
 export type CraftSkinId =
   | 'drone-default'
@@ -21,8 +28,14 @@ export type CraftSkinId =
   | 'rocket-default'
   | 'rocket-night'
   | 'balloon-default'
+  | 'kite-default'
+  | 'ufo-default'
+  | 'paper-default'
 
-export type RiskTone = 'calm' | 'safe' | 'balanced' | 'wild'
+export type RiskTone = 'calm' | 'safe' | 'balanced' | 'wild' | 'trick'
+
+/** Extra flight rules beyond normal / daily challenge */
+export type FlightMode = 'normal' | 'challenge' | 'blind'
 
 export interface LayerInfo {
   layer: number
@@ -43,6 +56,10 @@ export interface FlightResult {
   skyBonus?: number
   /** Daily challenge flight (seeded RNG) */
   challenge?: boolean
+  /** Blind flight mode */
+  blind?: boolean
+  /** UFO phase shield absorbed a crash */
+  ufoShieldUsed?: boolean
 }
 
 export interface DailyMission {

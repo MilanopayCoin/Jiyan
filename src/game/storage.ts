@@ -207,6 +207,13 @@ export function applyFlightResult(
   if (result.skyBonus && result.skyBonus >= 0.1 && result.outcome === 'cashed') {
     badges.add('gokyuzu-pilotu')
   }
+  if (result.blind && result.outcome === 'cashed' && result.layer >= 4) {
+    badges.add('kor-pilot')
+  }
+  if (result.ufoShieldUsed) badges.add('ufo-kacis')
+  if (result.craftId === 'kite' && result.outcome === 'cashed' && result.layer >= 5) {
+    badges.add('arac-kite')
+  }
 
   // Auto-unlock milestone skins (no spend) when requirements met
   const unlockedSkins = new Set(profile.unlockedSkins)
@@ -465,6 +472,11 @@ export const BADGE_LABELS: Record<string, string> = {
   'arac-balloon': 'Balon Açıldı',
   'arac-plane': 'Uçak Açıldı',
   'arac-rocket': 'Roket Açıldı',
+  'arac-kite': 'Uçurtma Açıldı',
+  'arac-ufo': 'UFO Açıldı',
+  'arac-paper': 'Kağıt Uçak Açıldı',
   'sinyal-bombasi': 'Sinyal Bombası',
   'gokyuzu-pilotu': 'Gökyüzü Pilotu',
+  'kor-pilot': 'Kör Pilot',
+  'ufo-kacis': 'Faz Kaçışı',
 }

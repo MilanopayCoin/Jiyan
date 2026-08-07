@@ -8,14 +8,16 @@ interface Props {
 
 export function FlightScreen({ game }: Props) {
   const canAct = game.phase === 'climbing' && game.layer >= 1
+  const led = game.displayLed
   const ledColor = game.bombArmed
     ? 'text-signal'
-    : game.led === 'safe'
+    : led === 'safe'
       ? 'text-signal'
-      : game.led === 'caution'
+      : led === 'caution'
         ? 'text-amber'
         : 'text-danger'
   const skyLabel = game.formatSkyBonus(game.skyBonus)
+  const deepBlind = game.blindMode && game.layer >= 3
 
   return (
     <div className="relative z-20 flex h-full flex-col">
@@ -25,15 +27,30 @@ export function FlightScreen({ game }: Props) {
             GÜNLÜK CHALLENGE · bomba/gökyüzü kapalı
           </p>
         )}
+        {game.blindMode && (
+          <p className="mb-2 text-center font-display text-sm tracking-[0.25em] text-ice">
+            KÖR UÇUŞ · LED + ses + titreşim
+          </p>
+        )}
+        {game.profile.selectedCraft === 'ufo' && game.ufoShieldReady && (
+          <p className="mb-2 text-center text-xs text-signal">
+            UFO faz kalkanı hazır · 1 kaçış
+          </p>
+        )}
+        {game.bluffLed && (
+          <p className="mb-1 text-center text-[10px] uppercase tracking-widest text-fog/80">
+            Sinyal güvenilmez olabilir
+          </p>
+        )}
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-fog">İrtifa</p>
             <p className="font-display text-3xl text-white">
-              K{game.layer || '—'}
+              {deepBlind ? '?' : `K${game.layer || '—'}`}
             </p>
           </div>
           <motion.div
-            key={`${game.multiplier}-${game.skyBonus}`}
+            key={`${game.multiplier}-${game.skyBonus}-${led}`}
             initial={{ scale: 1.25, opacity: 0.4 }}
             animate={{ scale: 1, opacity: 1 }}
             className="text-right"
@@ -42,9 +59,9 @@ export function FlightScreen({ game }: Props) {
             <p
               className={`font-display text-[clamp(3rem,12vw,4.5rem)] leading-none ${ledColor} pulse-glow`}
             >
-              {game.layer === 0 ? '—' : fmtX(game.multiplier)}
+              {game.layer === 0 ? '—' : deepBlind ? '??x' : fmtX(game.multiplier)}
             </p>
-            {game.skyActive && (
+            {game.skyActive && !game.blindMode && (
               <p className="text-xs font-medium text-ice">gökyüzü {skyLabel}</p>
             )}
           </motion.div>
@@ -55,16 +72,16 @@ export function FlightScreen({ game }: Props) {
             <p className={`font-display text-3xl ${ledColor}`}>
               {game.bombArmed
                 ? '◈'
-                : game.led === 'safe'
+                : led === 'safe'
                   ? '●'
-                  : game.led === 'caution'
+                  : led === 'caution'
                     ? '◐'
                     : '○'}
             </p>
           </div>
         </div>
 
-        {game.skyActive && (
+        {game.skyActive && !game.blindMode && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -84,13 +101,25 @@ export function FlightScreen({ game }: Props) {
           </motion.p>
         )}
 
-        {!game.bombArmed && !game.skyActive && game.layer >= 3 && (
+        {deepBlind && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.9 }}
+            className="mt-3 text-center text-xs text-ice"
+          >
+            Görüş kayboldu — LED ve titreşime güven
+          </motion.p>
+        )}
+
+        {!game.bombArmed && !game.skyActive && !deepBlind && game.layer >= 3 && (
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.8 }}
             className="mt-3 text-center text-xs text-fog wind-layer"
           >
-            Rüzgar artıyor · sinyal zayıflıyor
+            {game.profile.selectedCraft === 'kite'
+              ? 'İp geriliyor · telefonu eğ'
+              : 'Rüzgar artıyor · sinyal zayıflıyor'}
           </motion.p>
         )}
       </header>
@@ -99,12 +128,14 @@ export function FlightScreen({ game }: Props) {
 
       <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <p className="mb-3 text-center text-xs text-fog">
-          Sonraki katman ≈ {fmtX(game.previewNextMultiplier)}
+          {deepBlind
+            ? 'Sonraki katman gizli'
+            : `Sonraki katman ≈ ${fmtX(game.previewNextMultiplier)}`}
           {game.bombArmed ? ' · kalkanlı' : ''}
-          {game.skyActive ? ` · gökyüzü ${skyLabel}` : ''}
+          {game.skyActive && !game.blindMode ? ` · gökyüzü ${skyLabel}` : ''}
         </p>
 
-        {!game.challengeMode && (
+        {!game.challengeMode && !game.blindMode && (
           <motion.button
             type="button"
             whileTap={{ scale: 0.97 }}

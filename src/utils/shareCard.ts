@@ -83,7 +83,7 @@ function drawCraftSilhouette(
   ctx.shadowBlur = 28
   ctx.shadowOffsetY = 12
 
-  if (craftId === 'plane') {
+  if (craftId === 'plane' || craftId === 'paper') {
     ctx.fillStyle = body
     roundRect(ctx, -90, -18, 180, 36, 18)
     ctx.fill()
@@ -94,6 +94,30 @@ function drawCraftSilhouette(
     roundRect(ctx, -20, -55, 80, 14, 4)
     ctx.fill()
     roundRect(ctx, -20, 40, 80, 14, 4)
+    ctx.fill()
+  } else if (craftId === 'kite') {
+    ctx.fillStyle = body
+    ctx.beginPath()
+    ctx.moveTo(0, -90)
+    ctx.lineTo(70, 20)
+    ctx.lineTo(0, 50)
+    ctx.lineTo(-70, 20)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = accent
+    ctx.lineWidth = 6
+    ctx.beginPath()
+    ctx.moveTo(0, 50)
+    ctx.lineTo(10, 120)
+    ctx.stroke()
+  } else if (craftId === 'ufo') {
+    ctx.fillStyle = body
+    ctx.beginPath()
+    ctx.ellipse(0, 0, 90, 28, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = accent
+    ctx.beginPath()
+    ctx.ellipse(0, -18, 40, 28, 0, Math.PI, Math.PI * 2)
     ctx.fill()
   } else if (craftId === 'rocket') {
     ctx.fillStyle = body
