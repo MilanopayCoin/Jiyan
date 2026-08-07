@@ -8,6 +8,14 @@ import type {
 } from './types'
 import { todayKey, yesterdayKey } from './math'
 import { CRAFTS, SKINS, scorePoints } from './vehicles'
+import {
+  ASSETS,
+  emptyBalances,
+  isAssetId,
+  normalizeBalances,
+  roundAsset,
+  type AssetId,
+} from './assets'
 
 const STORAGE_KEY = 'zincir-drone-profile-v2'
 const LEGACY_KEY = 'zincir-drone-profile-v1'
@@ -50,6 +58,11 @@ export function defaultProfile(): PlayerProfile {
     selectedSkin: 'drone-default',
     walletAddress: null,
     walletVerified: false,
+    balances: emptyBalances(),
+    payAsset: 'usdt',
+    payWithCrypto: true,
+    stakeAmount: ASSETS.usdt.flightStake,
+    demoPackClaimed: false,
   }
 }
 
@@ -99,6 +112,16 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
     walletAddress:
       typeof raw.walletAddress === 'string' ? raw.walletAddress : null,
     walletVerified: Boolean(raw.walletVerified),
+    balances: normalizeBalances(raw.balances),
+    payAsset: isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdt',
+    payWithCrypto: raw.payWithCrypto !== false,
+    stakeAmount: (() => {
+      const asset = isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdt'
+      const n = Number(raw.stakeAmount)
+      if (Number.isFinite(n) && n > 0) return roundAsset(n, asset)
+      return ASSETS[asset].flightStake
+    })(),
+    demoPackClaimed: Boolean(raw.demoPackClaimed),
   }
 }
 
@@ -485,4 +508,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'kor-pilot': 'Kör Pilot',
   'ufo-kacis': 'Faz Kaçışı',
   'cuzdan-bagli': 'Cüzdan Bağlı',
+  'cuzdan-acildi': 'Kripto Cüzdan',
 }

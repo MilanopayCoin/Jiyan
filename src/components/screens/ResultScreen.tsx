@@ -5,6 +5,7 @@ import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS } from '../../game/vehicles'
 import { shareResultCard } from '../../utils/shareCard'
 import { sfx } from '../../utils/audio'
+import { formatAsset } from '../../game/assets'
 
 interface Props {
   game: GameApi
@@ -85,6 +86,13 @@ export function ResultScreen({ game }: Props) {
             Katman {result.layer || 0}
             {won ? ' · kilitlendi' : ' · kazanç sıfır'}
           </p>
+          {result.stakeAsset && result.stakeAmount != null && (
+            <p className="mt-2 text-sm text-amber">
+              {won
+                ? `+${formatAsset(result.payoutAmount ?? result.stakeAmount * result.multiplier, result.stakeAsset)}`
+                : `−${formatAsset(result.stakeAmount, result.stakeAsset)} kayıp`}
+            </p>
+          )}
 
           {!won && (
             <motion.p

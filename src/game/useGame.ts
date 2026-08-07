@@ -50,6 +50,22 @@ import type {
   Screen,
 } from './types'
 import { CRAFTS } from './vehicles'
+import {
+  ASSETS,
+  isAssetId,
+  normalizeBalances,
+  roundAsset,
+  type AssetId,
+} from './assets'
+import {
+  canStakeCrypto,
+  claimDemoPack,
+  creditPayout,
+  depositAsset,
+  recordCrashStake,
+  stakeForFlight,
+  withdrawAsset,
+} from './walletOps'
 import { haptic } from '../utils/haptics'
 import { sfx } from '../utils/audio'
 import {
@@ -323,6 +339,8 @@ export function useGame() {
   const blindRef = useRef(false)
   const ufoShieldRef = useRef(false)
   const rngRef = useRef<() => number>(Math.random)
+  const stakeAssetRef = useRef<AssetId | null>(null)
+  const stakeAmountRef = useRef(0)
 
   const refreshSync = useCallback(async () => {
     const local = loadFriends()
@@ -387,7 +405,31 @@ export function useGame() {
   }, [])
 
   const persistResult = useCallback((result: FlightResult) => {
-    const before = loadProfile()
+    let before = loadProfile()
+
+    // Crypto payout on safe landing (stake already deducted at takeoff)
+    if (
+      result.outcome === 'cashed' &&
+      result.stakeAsset &&
+      result.stakeAmount &&
+      result.stakeAmount > 0
+    ) {
+      const payout = roundAsset(result.stakeAmount * result.multiplier, result.stakeAsset)
+      const paid = creditPayout(before, result.stakeAsset, payout, result.multiplier)
+      if (paid.ok) {
+        before = { ...before, ...paid.profilePatch, balances: paid.balances }
+        saveProfile(before)
+        result = { ...result, payoutAmount: payout }
+      }
+    } else if (
+      result.outcome === 'crashed' &&
+      result.stakeAsset &&
+      result.stakeAmount &&
+      result.stakeAmount > 0
+    ) {
+      recordCrashStake(result.stakeAsset, result.stakeAmount)
+    }
+
     const { profile, consecutiveSafe } = applyFlightResult(
       before,
       result,
@@ -449,7 +491,14 @@ export function useGame() {
 
   const startFlight = useCallback((opts?: { challenge?: boolean; blind?: boolean }) => {
     const profile = loadProfile()
-    if (profile.flightCredits <= 0) return false
+    const payAsset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdt'
+    const stakeAmt =
+      Number.isFinite(profile.stakeAmount) && profile.stakeAmount > 0
+        ? roundAsset(profile.stakeAmount, payAsset)
+        : ASSETS[payAsset].flightStake
+    const useCrypto = canStakeCrypto(profile, payAsset, stakeAmt)
+
+    if (!useCrypto && profile.flightCredits <= 0) return false
 
     const craftId = profile.selectedCraft
     const skinId = profile.selectedSkin
@@ -462,9 +511,24 @@ export function useGame() {
       ? createRng(dailyChallengeSeed(todayKey(), craftId))
       : Math.random
 
-    const spent: PlayerProfile = {
-      ...profile,
-      flightCredits: profile.flightCredits - 1,
+    let spent: PlayerProfile = { ...profile }
+    if (useCrypto) {
+      const staked = stakeForFlight(spent, payAsset, stakeAmt)
+      if (!staked.ok) return false
+      spent = {
+        ...spent,
+        ...staked.profilePatch,
+        balances: staked.balances,
+      }
+      stakeAssetRef.current = payAsset
+      stakeAmountRef.current = stakeAmt
+    } else {
+      spent = {
+        ...spent,
+        flightCredits: spent.flightCredits - 1,
+      }
+      stakeAssetRef.current = null
+      stakeAmountRef.current = 0
     }
     saveProfile(spent)
     dispatch({ type: 'SET_PROFILE', profile: spent })
@@ -480,6 +544,13 @@ export function useGame() {
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
     const fairLock = () => challengeRef.current || blindRef.current
+    const stakeMeta = () =>
+      stakeAssetRef.current && stakeAmountRef.current > 0
+        ? {
+            stakeAsset: stakeAssetRef.current,
+            stakeAmount: stakeAmountRef.current,
+          }
+        : {}
 
     window.setTimeout(() => {
       const rng = rngRef.current
@@ -517,6 +588,7 @@ export function useGame() {
           skyBonus: skyB,
           challenge: challengeRef.current,
           blind: blindRef.current,
+          ...stakeMeta(),
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -637,6 +709,12 @@ export function useGame() {
           skyBonus: skyB,
           challenge,
           blind,
+          ...(stakeAssetRef.current && stakeAmountRef.current > 0
+            ? {
+                stakeAsset: stakeAssetRef.current,
+                stakeAmount: stakeAmountRef.current,
+              }
+            : {}),
         }
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -691,6 +769,16 @@ export function useGame() {
       challenge,
       blind,
       ufoShieldUsed: craftId === 'ufo' && !ufoShieldRef.current,
+      ...(stakeAssetRef.current && stakeAmountRef.current > 0
+        ? {
+            stakeAsset: stakeAssetRef.current,
+            stakeAmount: stakeAmountRef.current,
+            payoutAmount: roundAsset(
+              stakeAmountRef.current * state.multiplier,
+              stakeAssetRef.current,
+            ),
+          }
+        : {}),
     }
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
@@ -746,6 +834,69 @@ export function useGame() {
       ...profile,
       walletAddress: null,
       walletVerified: false,
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
+  const claimDemo = useCallback(() => {
+    const profile = loadProfile()
+    const res = claimDemoPack(profile)
+    if (!res.ok) return res
+    const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    if (!next.badges.includes('cuzdan-acildi')) {
+      next.badges = [...next.badges, 'cuzdan-acildi']
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    return res
+  }, [])
+
+  const deposit = useCallback((asset: AssetId, amount: number) => {
+    const profile = loadProfile()
+    const res = depositAsset(profile, asset, amount, profile.walletAddress ?? undefined)
+    if (!res.ok) return res
+    const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    return res
+  }, [])
+
+  const withdraw = useCallback((asset: AssetId, amount: number, toAddress: string) => {
+    const profile = loadProfile()
+    const res = withdrawAsset(profile, asset, amount, toAddress)
+    if (!res.ok) return res
+    const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    return res
+  }, [])
+
+  const setPayAsset = useCallback((asset: AssetId) => {
+    const profile = loadProfile()
+    const next: PlayerProfile = {
+      ...profile,
+      payAsset: asset,
+      stakeAmount: ASSETS[asset].flightStake,
+      balances: normalizeBalances(profile.balances),
+    }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
+  const setPayWithCrypto = useCallback((on: boolean) => {
+    const profile = loadProfile()
+    const next: PlayerProfile = { ...profile, payWithCrypto: on }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
+  const setStakeAmount = useCallback((amount: number) => {
+    const profile = loadProfile()
+    const asset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdt'
+    const next: PlayerProfile = {
+      ...profile,
+      stakeAmount: roundAsset(amount, asset),
     }
     saveProfile(next)
     dispatch({ type: 'SET_PROFILE', profile: next })
@@ -872,6 +1023,12 @@ export function useGame() {
     rename,
     linkWallet,
     unlinkWallet,
+    claimDemo,
+    deposit,
+    withdraw,
+    setPayAsset,
+    setPayWithCrypto,
+    setStakeAmount,
     selectCraft,
     buyCraft,
     buySkin,
