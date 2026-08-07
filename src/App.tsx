@@ -7,6 +7,7 @@ import { ResultScreen } from './components/screens/ResultScreen'
 import { LeaderboardScreen } from './components/screens/LeaderboardScreen'
 import { ProfileScreen } from './components/screens/ProfileScreen'
 import { HangarScreen } from './components/screens/HangarScreen'
+import { WalletScreen } from './components/screens/WalletScreen'
 import { useGame } from './game/useGame'
 import { useTilt } from './utils/tilt'
 
@@ -95,6 +96,7 @@ export default function App() {
       {game.screen === 'leaderboard' && <LeaderboardScreen game={game} />}
       {game.screen === 'profile' && <ProfileScreen game={game} />}
       {game.screen === 'hangar' && <HangarScreen game={game} />}
+      {game.screen === 'wallet' && <WalletScreen game={game} />}
 
       <BottomNav screen={game.screen} onNavigate={game.setScreen} />
     </div>

@@ -5,6 +5,7 @@ export type Screen =
   | 'leaderboard'
   | 'profile'
   | 'hangar'
+  | 'wallet'
 
 export type FlightPhase = 'idle' | 'climbing' | 'landing' | 'crashing' | 'done'
 
@@ -60,6 +61,9 @@ export interface FlightResult {
   blind?: boolean
   /** UFO phase shield absorbed a crash */
   ufoShieldUsed?: boolean
+  stakeAsset?: import('./assets').AssetId
+  stakeAmount?: number
+  payoutAmount?: number
 }
 
 export interface DailyMission {
@@ -96,6 +100,25 @@ export interface PlayerProfile {
   /** Linked Phantom / Solana wallet */
   walletAddress: string | null
   walletVerified: boolean
+  /** Multi-asset play balances */
+  balances: import('./assets').AssetBalances
+  /** Asset used to stake flights */
+  payAsset: import('./assets').AssetId
+  /** Prefer crypto stake over free pil when possible */
+  payWithCrypto: boolean
+  /** Selected stake amount in payAsset units */
+  stakeAmount: number
+  demoPackClaimed: boolean
+  /** Auto cash-out target multiplier; 0 = off */
+  autoCashOut: number
+  /** Last daily check-in date YYYY-MM-DD */
+  checkInDate: string | null
+  checkInStreak: number
+  /** Pilot id who invited this player */
+  referredBy: string | null
+  referralClaimed: boolean
+  /** Friend-count milestones already paid */
+  friendMilestonesClaimed: number[]
 }
 
 export interface LeaderboardEntry {

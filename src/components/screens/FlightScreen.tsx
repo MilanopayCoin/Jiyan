@@ -32,6 +32,14 @@ export function FlightScreen({ game }: Props) {
             KÖR UÇUŞ · LED + ses + titreşim
           </p>
         )}
+        {game.profile.autoCashOut > 0 && (
+          <p className="mb-2 text-center text-xs text-signal">
+            Auto cash-out {fmtX(game.profile.autoCashOut)}
+            {game.multiplier + 1e-9 >= game.profile.autoCashOut && game.layer >= 1
+              ? ' · iniyor…'
+              : ''}
+          </p>
+        )}
         {game.profile.selectedCraft === 'ufo' && game.ufoShieldReady && (
           <p className="mb-2 text-center text-xs text-signal">
             UFO faz kalkanı hazır · 1 kaçış
