@@ -32,6 +32,8 @@ Canlı: https://chaindrone.netlify.app
 - PWA (service worker + ana ekrana ekle + yerel bildirimler)
 - Neon Postgres + Netlify Functions (`/api/sync`) — arkadaş / günlük skor sync
 - Günlük challenge (paylaşılan seed RNG) · cihaz eğimi (DeviceOrientation)
+- Ek araçlar: Uçurtma, UFO (blöf LED + faz kalkanı), Kağıt Uçak
+- Kör Uçuş modu (katman 3+ görüş kaybı)
 
 ### Neon DB
 
