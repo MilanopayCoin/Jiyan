@@ -64,8 +64,12 @@ import {
   depositAsset,
   recordCrashStake,
   stakeForFlight,
-  withdrawAsset,
 } from './walletOps'
+import {
+  cancelWithdraw,
+  creditOnChainDeposit,
+  queueWithdraw,
+} from './withdrawQueue'
 import {
   AUTO_CASH_PRESETS,
   canCheckIn,
@@ -938,9 +942,32 @@ export function useGame() {
 
   const withdraw = useCallback((asset: AssetId, amount: number, toAddress: string) => {
     const profile = loadProfile()
-    const res = withdrawAsset(profile, asset, amount, toAddress)
+    const res = queueWithdraw(profile, asset, amount, toAddress)
     if (!res.ok) return res
     const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    return res
+  }, [])
+
+  const cancelQueuedWithdraw = useCallback((requestId: string) => {
+    const profile = loadProfile()
+    const res = cancelWithdraw(profile, requestId)
+    if (!res.ok) return res
+    const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    return res
+  }, [])
+
+  const creditChainDeposit = useCallback((amount: number, signature: string) => {
+    const profile = loadProfile()
+    const res = creditOnChainDeposit(profile, amount, signature)
+    if (!res.ok) return res
+    const next = { ...profile, ...res.profilePatch, balances: res.balances }
+    if (!next.badges.includes('onchain-yukle')) {
+      next.badges = [...next.badges, 'onchain-yukle']
+    }
     saveProfile(next)
     dispatch({ type: 'SET_PROFILE', profile: next })
     return res
@@ -1100,6 +1127,8 @@ export function useGame() {
     claimDemo,
     deposit,
     withdraw,
+    cancelQueuedWithdraw,
+    creditChainDeposit,
     setPayAsset,
     setPayWithCrypto,
     setStakeAmount,

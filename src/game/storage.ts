@@ -537,4 +537,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'davet-geldi': 'Davetle Geldi',
   'sosyal-pilot': 'Sosyal Pilot',
   'filo-davet': 'Davet Filosu',
+  'onchain-yukle': 'On-chain Yükleme',
 }

@@ -9,7 +9,13 @@ import {
   type AssetId,
 } from '../../game/assets'
 import { loadLedger } from '../../game/walletOps'
+import {
+  calcWithdrawFee,
+  loadWithdrawQueue,
+  WITHDRAW_FEE_BPS,
+} from '../../game/withdrawQueue'
 import { WalletPanel } from '../WalletPanel'
+import { OnChainSolDeposit } from '../OnChainSolDeposit'
 
 interface Props {
   game: GameApi
@@ -24,18 +30,22 @@ export function WalletScreen({ game }: Props) {
   const [amount, setAmount] = useState('')
   const [toAddress, setToAddress] = useState(profile.walletAddress ?? '')
   const [hint, setHint] = useState<string | null>(null)
-  const [ledgerTick, setLedgerTick] = useState(0)
+  const [tick, setTick] = useState(0)
 
-  const ledger = useMemo(() => loadLedger(), [ledgerTick, profile.balances])
+  const ledger = useMemo(() => loadLedger(), [tick, profile.balances])
+  const queue = useMemo(() => loadWithdrawQueue(), [tick, profile.balances])
   const meta = ASSETS[asset]
   const bal = profile.balances?.[asset] ?? 0
+  const amtNum = Number(amount.replace(',', '.')) || 0
+  const feePreview =
+    tab === 'withdraw' && amtNum > 0 ? calcWithdrawFee(asset, amtNum) : null
 
   const flash = (msg: string) => {
     setHint(msg)
     window.setTimeout(() => setHint(null), 2800)
   }
 
-  const refresh = () => setLedgerTick((n) => n + 1)
+  const refresh = () => setTick((n) => n + 1)
 
   const onDeposit = () => {
     const n = Number(amount.replace(',', '.'))
@@ -46,7 +56,7 @@ export function WalletScreen({ game }: Props) {
     }
     setAmount('')
     refresh()
-    flash(`Yüklendi: ${formatAsset(n, asset)}`)
+    flash(`Demo yüklendi: ${formatAsset(n, asset)}`)
   }
 
   const onWithdraw = () => {
@@ -58,7 +68,11 @@ export function WalletScreen({ game }: Props) {
     }
     setAmount('')
     refresh()
-    flash(`Çekim kaydı: ${formatAsset(n, asset)}`)
+    if (res.ok && 'request' in res) {
+      flash(
+        `Kuyruğa alındı · net ${formatAsset(res.request.net, asset)} (ücret ${formatAsset(res.request.fee, asset)})`,
+      )
+    }
   }
 
   const onDemo = () => {
@@ -194,9 +208,26 @@ export function WalletScreen({ game }: Props) {
         ))}
       </div>
 
+      {tab === 'deposit' && (
+        <OnChainSolDeposit
+          onCredited={(solAmt, signature) => {
+            const res = game.creditChainDeposit(solAmt, signature)
+            if (!res.ok) {
+              flash(res.error)
+              return
+            }
+            refresh()
+            flash(`Bakiyeye eklendi: ${formatAsset(solAmt, 'sol')}`)
+          }}
+        />
+      )}
+
       {(tab === 'deposit' || tab === 'withdraw') && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-panel p-4 backdrop-blur-md">
-          <div className="flex flex-wrap gap-2">
+          <p className="text-xs text-fog">
+            {tab === 'deposit' ? 'Demo yükleme (anında)' : 'Çekim kuyruğu'}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
             {ASSET_ORDER.map((id) => (
               <button
                 key={id}
@@ -225,13 +256,22 @@ export function WalletScreen({ game }: Props) {
             className="mt-2 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-white outline-none focus:border-signal/50"
           />
           {tab === 'withdraw' && (
-            <input
-              type="text"
-              placeholder="Çekim adresi"
-              value={toAddress}
-              onChange={(e) => setToAddress(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-signal/50"
-            />
+            <>
+              <input
+                type="text"
+                placeholder="Çekim adresi"
+                value={toAddress}
+                onChange={(e) => setToAddress(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-signal/50"
+              />
+              {feePreview && (
+                <div className="mt-2 rounded-xl border border-amber/25 bg-amber/10 px-3 py-2 text-xs text-amber">
+                  Ücret %{WITHDRAW_FEE_BPS / 100}:{' '}
+                  {formatAsset(feePreview.fee, asset)} → net{' '}
+                  {formatAsset(feePreview.net, asset)}
+                </div>
+              )}
+            </>
           )}
           <div className="mt-2 flex flex-wrap gap-2">
             {(tab === 'deposit'
@@ -261,13 +301,56 @@ export function WalletScreen({ game }: Props) {
                   : 'linear-gradient(135deg, #b45309, #ffb84d)',
             }}
           >
-            {tab === 'deposit' ? 'Yükle' : 'Geri çek'}
+            {tab === 'deposit' ? 'Demo yükle' : 'Kuyruğa al'}
           </button>
           <p className="mt-2 text-[11px] leading-relaxed text-fog">
             {tab === 'deposit'
-              ? 'Demo yükleme: bakiyene anında eklenir. Gerçek zincir transferi bağlı cüzdan ile yapılır.'
-              : 'Çekim, bağlı adrese kayıt edilir. On-chain gönderim için cüzdanını doğrula.'}
+              ? 'Demo anında eklenir. Gerçek SOL için yukarıdaki Phantom yüklemeyi kullan.'
+              : 'Bakiye düşer, talep bekleyen kuyruğa girer. Ücret şeffaf; iptal iade eder.'}
           </p>
+        </div>
+      )}
+
+      {tab === 'withdraw' && queue.some((q) => q.status === 'pending') && (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-wider text-fog">
+            Bekleyen çekimler
+          </p>
+          <ul className="mt-2 space-y-2">
+            {queue
+              .filter((q) => q.status === 'pending')
+              .slice(0, 8)
+              .map((q) => (
+                <li
+                  key={q.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-panel px-3 py-2.5"
+                >
+                  <div>
+                    <p className="text-sm text-white">
+                      {formatAsset(q.net, q.asset)} net
+                    </p>
+                    <p className="text-[11px] text-fog">
+                      Ücret {formatAsset(q.fee, q.asset)} ·{' '}
+                      {q.toAddress.slice(0, 6)}…{q.toAddress.slice(-4)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = game.cancelQueuedWithdraw(q.id)
+                      if (!res.ok) flash(res.error)
+                      else {
+                        refresh()
+                        flash('Çekim iptal · bakiye iade')
+                      }
+                    }}
+                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-fog"
+                  >
+                    İptal
+                  </button>
+                </li>
+              ))}
+          </ul>
         </div>
       )}
 
