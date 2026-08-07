@@ -12,6 +12,7 @@
   # Claimable Neon DB (72h unless claimed). Claim: https://neon.new/claim/019fd967-b410-769a-9dc7-562b5815504e
   # After claiming, move DATABASE_URL to Netlify site env vars and remove from here.
   DATABASE_URL = "postgresql://neondb_owner:npg_hcf8CVwq7dLs@ep-damp-cell-axqlfdo7-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require"
+  VITE_WALLETCONNECT_PROJECT_ID = "6f704759b7faa449ccbf5fdf9d2d4eb5"
 
 # API → Netlify Functions (must be before SPA fallback)
 [[redirects]]
