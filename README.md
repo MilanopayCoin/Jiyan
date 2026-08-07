@@ -34,8 +34,13 @@ Canlı: https://chaindrone.netlify.app
 - Günlük challenge (paylaşılan seed RNG) · cihaz eğimi (DeviceOrientation)
 - Ek araçlar: Uçurtma, UFO (blöf LED + faz kalkanı), Kağıt Uçak
 - Kör Uçuş modu (katman 3+ görüş kaybı)
+- Phantom cüzdan bağlantısı (Profil → bağla / mesaj imzala)
 
-### Neon DB
+### Phantom
+
+Extension (`injected`) App ID olmadan çalışır. Google/Apple için Portal’dan App ID alıp Netlify / `.env`’e `VITE_PHANTOM_APP_ID` ekleyin; redirect URL’i allowlist’e alın (`https://chaindrone.netlify.app/`).
+
+Docs: https://docs.phantom.com/sdks/react-sdk/
 
 Claimable Postgres (süreli). Kalıcı yapmak için claim edin ve `DATABASE_URL`’i Netlify env’e taşıyın:
 
