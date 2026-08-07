@@ -10,11 +10,20 @@ import {
 } from '@phantom/react-sdk'
 import { AddressType } from '@phantom/browser-sdk'
 import { hasPhantomAppId } from '../wallet/PhantomRoot'
+import {
+  connectWalletConnect,
+  disconnectWalletConnect,
+  hasWalletConnectProjectId,
+  signWithWalletConnect,
+  walletConnectAddress,
+} from '../wallet/walletConnect'
 
 function shortAddr(addr: string): string {
   if (addr.length < 12) return addr
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`
 }
+
+type Source = 'phantom' | 'walletconnect' | null
 
 interface Props {
   linkedAddress: string | null
@@ -38,25 +47,32 @@ export function WalletPanel({
   const { open } = useModal()
   const [hint, setHint] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [source, setSource] = useState<Source>(null)
 
-  const solanaAddr =
+  const phantomAddr =
     addresses?.find((a) => a.addressType === AddressType.solana)?.address ||
     addresses?.[0]?.address
 
+  const wcAddr = walletConnectAddress()
+  const liveAddr = phantomAddr || wcAddr
+  const connected = Boolean(isConnected || wcAddr)
+
   useEffect(() => {
-    if (isConnected && solanaAddr && solanaAddr !== linkedAddress) {
-      onLinked(solanaAddr, false)
+    if (isConnected && phantomAddr) {
+      setSource('phantom')
+      if (phantomAddr !== linkedAddress) onLinked(phantomAddr, false)
     }
-  }, [isConnected, solanaAddr, linkedAddress, onLinked])
+  }, [isConnected, phantomAddr, linkedAddress, onLinked])
 
   const flash = (msg: string) => {
     setHint(msg)
-    window.setTimeout(() => setHint(null), 2800)
+    window.setTimeout(() => setHint(null), 3200)
   }
 
-  const connectInjected = async () => {
+  const connectPhantom = async () => {
     setBusy(true)
     try {
+      if (wcAddr) await disconnectWalletConnect()
       if (!isInstalled) {
         window.open('https://phantom.app/download', '_blank', 'noopener')
         flash('Phantom yükle — sonra tekrar bağla')
@@ -64,10 +80,38 @@ export function WalletPanel({
       }
       const result = await connect({ provider: 'injected' })
       const addr = result.addresses?.[0]?.address
-      if (addr) onLinked(addr, false)
-      flash('Cüzdan bağlandı')
+      if (addr) {
+        setSource('phantom')
+        onLinked(addr, false)
+      }
+      flash('Phantom bağlandı')
     } catch (err) {
       flash(err instanceof Error ? err.message : 'Bağlantı iptal')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const connectWc = async () => {
+    if (!hasWalletConnectProjectId()) {
+      flash('WalletConnect için VITE_WALLETCONNECT_PROJECT_ID gerekli')
+      return
+    }
+    setBusy(true)
+    try {
+      if (isConnected) {
+        try {
+          await disconnect()
+        } catch {
+          // ignore
+        }
+      }
+      const addr = await connectWalletConnect()
+      setSource('walletconnect')
+      onLinked(addr, false)
+      flash('WalletConnect bağlandı')
+    } catch (err) {
+      flash(err instanceof Error ? err.message : 'WalletConnect iptal')
     } finally {
       setBusy(false)
     }
@@ -76,26 +120,31 @@ export function WalletPanel({
   const connectSocial = async () => {
     setBusy(true)
     try {
-      if (hasPhantomAppId()) {
-        open()
-      } else {
-        flash('Sosyal giriş için Phantom Portal appId gerekli')
-      }
+      if (hasPhantomAppId()) open()
+      else flash('Sosyal giriş için VITE_PHANTOM_APP_ID gerekli')
     } finally {
       setBusy(false)
     }
   }
 
   const verifyOwnership = async () => {
-    if (!isConnected || !solanaAddr || !isAvailable) {
+    const addr = liveAddr || linkedAddress
+    if (!addr) {
       flash('Önce cüzdanı bağla')
       return
     }
     setBusy(true)
     try {
-      const msg = `Zincir: Drone — pilot bağla\nAdres: ${solanaAddr}\nZaman: ${new Date().toISOString()}`
-      await solana.signMessage(msg)
-      onLinked(solanaAddr, true)
+      const msg = `Zincir: Drone — pilot bağla\nAdres: ${addr}\nZaman: ${new Date().toISOString()}`
+      if (source === 'walletconnect' || (!isConnected && wcAddr)) {
+        await signWithWalletConnect(msg)
+      } else if (isAvailable && isConnected) {
+        await solana.signMessage(msg)
+      } else {
+        flash('İmza için aktif oturum yok — yeniden bağla')
+        return
+      }
+      onLinked(addr, true)
       flash('İmza doğrulandı · cüzdan kayıtlı')
     } catch (err) {
       flash(err instanceof Error ? err.message : 'İmza iptal')
@@ -107,41 +156,58 @@ export function WalletPanel({
   const handleDisconnect = async () => {
     setBusy(true)
     try {
-      await disconnect()
+      if (isConnected) await disconnect()
+      await disconnectWalletConnect()
+      setSource(null)
       onUnlinked()
       flash('Cüzdan bağlantısı kesildi')
     } catch {
+      setSource(null)
       onUnlinked()
     } finally {
       setBusy(false)
     }
   }
 
-  const display = linkedAddress || solanaAddr
+  const display = linkedAddress || liveAddr
 
   return (
     <div className="mt-3 rounded-2xl border border-white/10 bg-panel px-4 py-3 backdrop-blur-md">
-      <p className="text-xs uppercase tracking-wider text-fog">Phantom cüzdan</p>
+      <p className="text-xs uppercase tracking-wider text-fog">Wallet Connect</p>
       <p className="mt-1 text-sm text-white">
         {display
-          ? `${shortAddr(display)}${verified ? ' · doğrulandı' : ' · imza bekleniyor'}`
+          ? `${shortAddr(display)}${verified ? ' · doğrulandı' : ' · imza bekleniyor'}${
+              source === 'walletconnect'
+                ? ' · WC'
+                : source === 'phantom'
+                  ? ' · Phantom'
+                  : ''
+            }`
           : 'Bağlı değil'}
       </p>
 
       {(isLoading || extLoading) && (
-        <p className="mt-2 text-xs text-fog">Phantom kontrol ediliyor…</p>
+        <p className="mt-2 text-xs text-fog">Cüzdan kontrol ediliyor…</p>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {!isConnected ? (
+        {!connected ? (
           <>
             <button
               type="button"
               disabled={busy || isConnecting}
-              onClick={connectInjected}
+              onClick={connectPhantom}
               className="rounded-xl bg-signal/20 px-3 py-2 text-sm font-medium text-signal disabled:opacity-40"
             >
-              {isConnecting || busy ? 'Bağlanıyor…' : 'Phantom bağla'}
+              {isConnecting || busy ? 'Bağlanıyor…' : 'Connect Wallet'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={connectWc}
+              className="rounded-xl border border-[#3b99fc]/50 bg-[#3b99fc]/15 px-3 py-2 text-sm font-medium text-[#7eb8ff] disabled:opacity-40"
+            >
+              WalletConnect
             </button>
             {hasPhantomAppId() && (
               <button
@@ -194,13 +260,16 @@ export function WalletPanel({
         </p>
       )}
 
-      {!hasPhantomAppId() && (
-        <p className="mt-2 text-[10px] leading-snug text-fog/80">
-          Extension ile bağlanır. Google/Apple için{' '}
-          <code className="text-fog">VITE_PHANTOM_APP_ID</code> ekleyin
-          (phantom.com/portal).
-        </p>
-      )}
+      <p className="mt-2 text-[10px] leading-snug text-fog/80">
+        Connect Wallet = Phantom extension. WalletConnect = QR / mobil cüzdan
+        {!hasWalletConnectProjectId() && (
+          <>
+            {' '}
+            · WC için <code className="text-fog">VITE_WALLETCONNECT_PROJECT_ID</code>{' '}
+            (cloud.reown.com)
+          </>
+        )}
+      </p>
     </div>
   )
 }

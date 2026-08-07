@@ -35,6 +35,7 @@ Canlı: https://chaindrone.netlify.app
 - Ek araçlar: Uçurtma, UFO (blöf LED + faz kalkanı), Kağıt Uçak
 - Kör Uçuş modu (katman 3+ görüş kaybı)
 - Phantom cüzdan bağlantısı (Profil → bağla / mesaj imzala)
+- WalletConnect (QR / mobil) — `VITE_WALLETCONNECT_PROJECT_ID`
 
 ### Phantom
 

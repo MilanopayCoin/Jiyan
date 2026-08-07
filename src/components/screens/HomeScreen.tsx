@@ -66,6 +66,34 @@ export function HomeScreen({ game }: Props) {
               {game.profile.bombs ?? 0}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => game.setScreen('profile')}
+            className={`rounded-full border px-4 py-1.5 backdrop-blur-sm ${
+              game.profile.walletVerified
+                ? 'border-signal/40 bg-signal/15'
+                : game.profile.walletAddress
+                  ? 'border-amber/40 bg-amber/15'
+                  : 'border-[#3b99fc]/40 bg-[#3b99fc]/15'
+            }`}
+          >
+            <span className="text-xs text-fog">Cüzdan </span>
+            <span
+              className={`font-display text-sm ${
+                game.profile.walletVerified
+                  ? 'text-signal'
+                  : game.profile.walletAddress
+                    ? 'text-amber'
+                    : 'text-[#7eb8ff]'
+              }`}
+            >
+              {game.profile.walletVerified
+                ? 'OK'
+                : game.profile.walletAddress
+                  ? 'İmza'
+                  : 'Bağla'}
+            </span>
+          </button>
         </div>
 
         <button
