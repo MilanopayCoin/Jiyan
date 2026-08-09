@@ -305,7 +305,7 @@ export function HomeScreen({ game }: Props) {
                 >
                   {game.profile.highRoller
                     ? formatAsset(s, payAsset)
-                    : formatUsd(s)}
+                    : `${formatUsd(s)} USDC`}
                 </button>
               ))}
             </div>
