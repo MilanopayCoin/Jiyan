@@ -1,4 +1,5 @@
 import { CameraBackground } from './components/CameraBackground'
+import { FrontFaceOverlay } from './components/FrontFaceOverlay'
 import { DroneScene } from './components/DroneScene'
 import { BottomNav } from './components/BottomNav'
 import { HomeScreen } from './components/screens/HomeScreen'
@@ -33,6 +34,13 @@ export default function App() {
 
   const inFlight = game.screen === 'flight' && game.phase === 'climbing'
   const layerForWind = inFlight ? game.layer : 0
+  const wantFront =
+    (game.screen === 'flight' && !game.challengeMode && !game.blindMode) ||
+    (game.screen === 'result' && game.result?.outcome === 'cashed')
+  const selfieMode =
+    game.screen === 'result' &&
+    game.result?.outcome === 'cashed' &&
+    !game.result.selfieCaptured
 
   return (
     <div
@@ -43,11 +51,21 @@ export default function App() {
       )}`}
     >
       <CameraBackground
-        showHint={game.screen === 'home' || game.screen === 'flight'}
+        enabled={!wantFront}
+        showHint={game.screen === 'home'}
         onSkySample={game.setSkySample}
         blinded={
           game.screen === 'flight' && game.blindMode && game.layer >= 3
         }
+      />
+
+      <FrontFaceOverlay
+        active={wantFront}
+        selfieMode={selfieMode}
+        onSample={game.setFaceSample}
+        onSelfieComplete={() => {
+          game.completeSelfie()
+        }}
       />
 
       {showCraft && (

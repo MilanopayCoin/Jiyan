@@ -301,6 +301,13 @@ export function applyFlightResult(
     badges.add('kor-pilot')
   }
   if (result.ufoShieldUsed) badges.add('ufo-kacis')
+  if (result.eyeShieldUsed) badges.add('goz-kalkani')
+  if (result.smileCashOut && result.outcome === 'cashed') {
+    badges.add('gulumseme-inis')
+  }
+  if (result.selfieCaptured && result.outcome === 'cashed') {
+    badges.add('selfie-pilot')
+  }
   if (result.craftId === 'kite' && result.outcome === 'cashed' && result.layer >= 5) {
     badges.add('arac-kite')
   }
@@ -569,6 +576,9 @@ export const BADGE_LABELS: Record<string, string> = {
   'gokyuzu-pilotu': 'Gökyüzü Pilotu',
   'kor-pilot': 'Kör Pilot',
   'ufo-kacis': 'Faz Kaçışı',
+  'goz-kalkani': 'Göz Kalkanı',
+  'gulumseme-inis': 'Gülümseme İniş',
+  'selfie-pilot': 'Selfie Pilot',
   'cuzdan-bagli': 'Cüzdan Bağlı',
   'cuzdan-acildi': 'Kripto Cüzdan',
   'checkin-pilot': 'Check-in Pilotu',

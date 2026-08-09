@@ -10,6 +10,8 @@ interface Props {
   onSkySample?: (sample: ReturnType<typeof skyBonusFromScore>) => void
   /** Blind flight: crush camera visibility */
   blinded?: boolean
+  /** Pause rear camera (front-camera features need the lens) */
+  enabled?: boolean
 }
 
 export function CameraBackground({
@@ -17,6 +19,7 @@ export function CameraBackground({
   showHint = false,
   onSkySample,
   blinded = false,
+  enabled = true,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -26,6 +29,14 @@ export function CameraBackground({
   onSkyRef.current = onSkySample
 
   useEffect(() => {
+    if (!enabled) {
+      stopStream(streamRef.current)
+      streamRef.current = null
+      setStatus('pending')
+      onSkyRef.current?.(skyBonusFromScore(0))
+      return
+    }
+
     let cancelled = false
 
     ;(async () => {
@@ -54,11 +65,11 @@ export function CameraBackground({
       stopStream(streamRef.current)
       streamRef.current = null
     }
-  }, [])
+  }, [enabled])
 
   // Sample sky score while camera is live
   useEffect(() => {
-    if (status !== 'active') return
+    if (!enabled || status !== 'active') return
 
     if (!canvasRef.current) {
       canvasRef.current = document.createElement('canvas')
@@ -84,7 +95,7 @@ export function CameraBackground({
     raf = requestAnimationFrame(tick)
 
     return () => cancelAnimationFrame(raf)
-  }, [status])
+  }, [status, enabled])
 
   const showFallback = status === 'denied' || status === 'unavailable'
 

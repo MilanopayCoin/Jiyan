@@ -4,6 +4,7 @@ import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS } from '../../game/vehicles'
 import { shareResultCard } from '../../utils/shareCard'
+import { shareSelfieCard } from '../../utils/selfieCard'
 import { sfx } from '../../utils/audio'
 import {
   formatPayoutUsdc,
@@ -85,7 +86,11 @@ export function ResultScreen({ game }: Props) {
     setShareHint(null)
     void sfx.unlock()
     try {
-      const mode = await shareResultCard(result)
+      const front = document.querySelector<HTMLVideoElement>('video[data-front-video]')
+      const mode =
+        result.selfieCaptured && front
+          ? await shareSelfieCard(result, front, game.profile.displayName)
+          : await shareResultCard(result)
       if (mode === 'download') {
         setShareHint('Kart indirildi · metin kopyalandı')
       } else if (mode === 'copied') {
@@ -188,6 +193,23 @@ export function ResultScreen({ game }: Props) {
             <p className="mt-2 text-xs text-ice">
               Gökyüzü bonusu +{Math.round(result.skyBonus * 100)}%
             </p>
+          )}
+          {result.eyeShieldUsed && (
+            <p className="mt-2 text-xs text-signal">Göz kalkanı kurtardı</p>
+          )}
+          {won && result.smileCashOut && (
+            <p className="mt-2 text-xs text-amber">Gülümseme ile indin</p>
+          )}
+          {won && result.selfieCaptured && (
+            <p className="mt-2 text-xs text-ice">Selfie Pilot ✓</p>
+          )}
+          {won && !result.selfieCaptured && (
+            <p className="mt-2 text-xs text-fog">
+              Ön kamerada yüzünü 2 sn tut — selfie rozeti
+            </p>
+          )}
+          {game.retentionHint && (
+            <p className="mt-2 text-xs text-signal">{game.retentionHint}</p>
           )}
         </div>
 

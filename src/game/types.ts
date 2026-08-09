@@ -61,6 +61,12 @@ export interface FlightResult {
   blind?: boolean
   /** UFO phase shield absorbed a crash */
   ufoShieldUsed?: boolean
+  /** Front-camera eye-contact shield absorbed a crash */
+  eyeShieldUsed?: boolean
+  /** Cash-out triggered by smile near target */
+  smileCashOut?: boolean
+  /** Selfie pilot capture completed for this result */
+  selfieCaptured?: boolean
   stakeAsset?: import('./assets').AssetId
   stakeAmount?: number
   payoutAmount?: number

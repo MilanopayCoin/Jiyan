@@ -53,6 +53,25 @@ export function FlightScreen({ game }: Props) {
             fair {shortCommit(game.fairCommit)}
           </p>
         )}
+        {game.eyeShieldReady && (
+          <p
+            className={`mb-2 text-center text-xs ${
+              game.gazeActive ? 'text-signal' : 'text-fog'
+            }`}
+          >
+            {game.gazeActive
+              ? 'Göz kalkanı aktif · bakışı koru'
+              : 'Göz kalkanı · ön kameraya bak'}
+          </p>
+        )}
+        {game.smileActive && game.layer >= 1 && (
+          <p className="mb-2 text-center text-xs text-amber">
+            Gülümseme algılandı
+            {game.profile.autoCashOut > 0
+              ? ` · ${fmtX(game.profile.autoCashOut)} yakınına iniş`
+              : ' · 2x yakınına iniş'}
+          </p>
+        )}
         {game.profile.selectedCraft === 'ufo' && game.ufoShieldReady && (
           <p className="mb-2 text-center text-xs text-signal">
             UFO faz kalkanı hazır · 1 kaçış

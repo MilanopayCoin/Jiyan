@@ -139,6 +139,11 @@ interface GameState {
   /** UFO may show a lying LED */
   bluffLed: LedLevel | null
   ufoShieldReady: boolean
+  /** Front-camera eye-contact shield ready */
+  eyeShieldReady: boolean
+  gazeActive: boolean
+  smileActive: boolean
+  facePresent: boolean
 }
 
 type Action =
@@ -167,8 +172,15 @@ type Action =
   | { type: 'ARM_BOMB' }
   | { type: 'CONSUME_SHIELD' }
   | { type: 'CONSUME_UFO_SHIELD' }
+  | { type: 'CONSUME_EYE_SHIELD' }
   | { type: 'SHIELD_FLASH_OFF' }
   | { type: 'SET_SKY'; sample: SkySample }
+  | {
+      type: 'SET_FACE'
+      gaze: boolean
+      smile: boolean
+      face: boolean
+    }
 
 function initialState(): GameState {
   const profile = loadProfile()
@@ -197,6 +209,10 @@ function initialState(): GameState {
     blindMode: false,
     bluffLed: null,
     ufoShieldReady: false,
+    eyeShieldReady: false,
+    gazeActive: false,
+    smileActive: false,
+    facePresent: false,
   }
 }
 
@@ -239,6 +255,10 @@ function reducer(state: GameState, action: Action): GameState {
         blindMode: action.blind,
         bluffLed: null,
         ufoShieldReady: state.profile.selectedCraft === 'ufo',
+        eyeShieldReady: !action.challenge && !action.blind,
+        gazeActive: false,
+        smileActive: false,
+        facePresent: false,
         skyBonus: action.challenge || action.blind ? 0 : state.skyBonus,
         skyActive: action.challenge || action.blind ? false : state.skyActive,
       }
@@ -310,6 +330,10 @@ function reducer(state: GameState, action: Action): GameState {
         blindMode: false,
         bluffLed: null,
         ufoShieldReady: false,
+        eyeShieldReady: false,
+        gazeActive: false,
+        smileActive: false,
+        facePresent: false,
       }
     case 'RENAME': {
       const profile = { ...state.profile, displayName: action.name }
@@ -335,6 +359,20 @@ function reducer(state: GameState, action: Action): GameState {
         shieldFlash: true,
         bluffLed: null,
         led: 'safe',
+      }
+    case 'CONSUME_EYE_SHIELD':
+      return {
+        ...state,
+        eyeShieldReady: false,
+        shieldFlash: true,
+        led: 'safe',
+      }
+    case 'SET_FACE':
+      return {
+        ...state,
+        gazeActive: action.gaze,
+        smileActive: action.smile,
+        facePresent: action.face,
       }
     case 'SHIELD_FLASH_OFF':
       return { ...state, shieldFlash: false }
@@ -363,6 +401,10 @@ export function useGame() {
   const challengeRef = useRef(false)
   const blindRef = useRef(false)
   const ufoShieldRef = useRef(false)
+  const eyeShieldRef = useRef(false)
+  const eyeShieldUsedRef = useRef(false)
+  const gazeRef = useRef(false)
+  const smileCashOutRef = useRef(false)
   const rngRef = useRef<() => number>(Math.random)
   const stakeAssetRef = useRef<AssetId | null>(null)
   const stakeAmountRef = useRef(0)
@@ -453,6 +495,29 @@ export function useGame() {
     return () => window.clearTimeout(t)
   }, [state.phase, state.layer, state.multiplier, state.profile.autoCashOut])
 
+  // Smile cash-out near auto target (or default 2x)
+  useEffect(() => {
+    if (state.phase !== 'climbing' || state.layer < 1) return
+    if (state.challengeMode || state.blindMode) return
+    if (!state.smileActive) return
+    const target =
+      state.profile.autoCashOut > 0 ? state.profile.autoCashOut : 2
+    if (state.multiplier + 1e-9 < target * 0.92) return
+    const t = window.setTimeout(() => {
+      smileCashOutRef.current = true
+      cashOutRef.current()
+    }, 380)
+    return () => window.clearTimeout(t)
+  }, [
+    state.phase,
+    state.layer,
+    state.multiplier,
+    state.smileActive,
+    state.profile.autoCashOut,
+    state.challengeMode,
+    state.blindMode,
+  ])
+
   const setSkySample = useCallback((sample: SkySample) => {
     const wasActive = skyActiveRef.current
     dispatch({ type: 'SET_SKY', sample })
@@ -461,6 +526,29 @@ export function useGame() {
       sfx.warn()
     }
   }, [])
+
+  const setFaceSample = useCallback(
+    (sample: { face: boolean; gaze: boolean; smile: boolean }) => {
+      if (state.challengeMode || state.blindMode) {
+        gazeRef.current = false
+        dispatch({
+          type: 'SET_FACE',
+          face: false,
+          gaze: false,
+          smile: false,
+        })
+        return
+      }
+      gazeRef.current = sample.gaze
+      dispatch({
+        type: 'SET_FACE',
+        face: sample.face,
+        gaze: sample.gaze && eyeShieldRef.current,
+        smile: sample.smile,
+      })
+    },
+    [state.challengeMode, state.blindMode],
+  )
 
   const persistResult = useCallback((result: FlightResult) => {
     let before = loadProfile()
@@ -635,6 +723,10 @@ export function useGame() {
     challengeRef.current = challenge
     blindRef.current = blind
     ufoShieldRef.current = craftId === 'ufo'
+    eyeShieldRef.current = !challenge && !blind
+    eyeShieldUsedRef.current = false
+    smileCashOutRef.current = false
+    gazeRef.current = false
 
     const fairSeed = challenge
       ? `zincir-challenge-${todayKey()}-${craftId}`
@@ -693,7 +785,26 @@ export function useGame() {
       const rng = rngRef.current
       fairRollsRef.current += 1
       if (rollCrash(1, craftId, false, rng)) {
-        // UFO phase shield can absorb even takeoff crash
+        // Eye-contact shield (front camera) then UFO phase shield
+        if (eyeShieldRef.current && gazeRef.current) {
+          eyeShieldRef.current = false
+          eyeShieldUsedRef.current = true
+          dispatch({ type: 'CONSUME_EYE_SHIELD' })
+          window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
+          haptic.bomb()
+          sfx.bomb()
+          haptic.climb(craftId)
+          sfx.setPropLayer(1, craftId)
+          const real = getLedLevel(1, craftId)
+          dispatch({
+            type: 'CLIMB_SUCCESS',
+            layer: 1,
+            craftId,
+            skyBonus: fairLock() ? 0 : skyBonusRef.current,
+            bluffLed: pickBluffLed(craftId, 1, real),
+          })
+          return
+        }
         if (ufoShieldRef.current) {
           ufoShieldRef.current = false
           dispatch({ type: 'CONSUME_UFO_SHIELD' })
@@ -726,6 +837,7 @@ export function useGame() {
           skyBonus: skyB,
           challenge: challengeRef.current,
           blind: blindRef.current,
+          eyeShieldUsed: eyeShieldUsedRef.current,
           ...stakeMeta(),
         })
         haptic.crash(craftId)
@@ -817,6 +929,25 @@ export function useGame() {
     window.setTimeout(() => {
       fairRollsRef.current += 1
       if (rollCrash(nextLayer, craftId, shielded, rngRef.current)) {
+        if (eyeShieldRef.current && gazeRef.current) {
+          eyeShieldRef.current = false
+          eyeShieldUsedRef.current = true
+          dispatch({ type: 'CONSUME_EYE_SHIELD' })
+          window.setTimeout(() => dispatch({ type: 'SHIELD_FLASH_OFF' }), 600)
+          haptic.bomb()
+          sfx.bomb()
+          sfx.setPropLayer(nextLayer, craftId)
+          const real = getLedLevel(nextLayer, craftId)
+          dispatch({
+            type: 'CLIMB_SUCCESS',
+            layer: nextLayer,
+            craftId,
+            skyBonus: skyB,
+            bluffLed: pickBluffLed(craftId, nextLayer, real),
+          })
+          animatingRef.current = false
+          return
+        }
         if (ufoShieldRef.current) {
           ufoShieldRef.current = false
           dispatch({ type: 'CONSUME_UFO_SHIELD' })
@@ -848,6 +979,7 @@ export function useGame() {
           skyBonus: skyB,
           challenge,
           blind,
+          eyeShieldUsed: eyeShieldUsedRef.current,
           ...(stakeAssetRef.current && stakeAmountRef.current > 0
             ? {
                 stakeAsset: stakeAssetRef.current,
@@ -908,6 +1040,8 @@ export function useGame() {
       challenge,
       blind,
       ufoShieldUsed: craftId === 'ufo' && !ufoShieldRef.current,
+      eyeShieldUsed: eyeShieldUsedRef.current,
+      smileCashOut: smileCashOutRef.current,
       ...(stakeAssetRef.current && stakeAmountRef.current > 0
         ? {
             stakeAsset: stakeAssetRef.current,
@@ -919,6 +1053,7 @@ export function useGame() {
           }
         : {}),
     })
+    smileCashOutRef.current = false
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
     window.setTimeout(() => {
@@ -1255,6 +1390,29 @@ export function useGame() {
     }
   }, [])
 
+  const completeSelfie = useCallback(() => {
+    const result = state.result
+    if (!result || result.outcome !== 'cashed' || result.selfieCaptured) {
+      return false
+    }
+    const patched: FlightResult = { ...result, selfieCaptured: true }
+    const profile = loadProfile()
+    const badges = profile.badges.includes('selfie-pilot')
+      ? profile.badges
+      : [...profile.badges, 'selfie-pilot']
+    const history = profile.history.map((h) =>
+      h.timestamp === result.timestamp ? patched : h,
+    )
+    const next: PlayerProfile = { ...profile, badges, history }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+    dispatch({ type: 'PATCH_RESULT', result: patched })
+    haptic.unlock()
+    setRetentionHint('Selfie Pilot rozeti!')
+    window.setTimeout(() => setRetentionHint(null), 2800)
+    return true
+  }, [state.result])
+
   return {
     ...state,
     startFlight,
@@ -1263,6 +1421,8 @@ export function useGame() {
     armBomb,
     purchaseBomb,
     setSkySample,
+    setFaceSample,
+    completeSelfie,
     goHome,
     setScreen,
     hideTip,
