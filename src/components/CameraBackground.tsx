@@ -158,9 +158,9 @@ export function CameraBackground({
       )}
 
       {showHint && showFallback && (
-        <div className="pointer-events-none absolute left-1/2 top-[12%] z-10 w-[90%] max-w-sm -translate-x-1/2 text-center">
-          <p className="rounded-full bg-black/40 px-4 py-2 text-xs text-fog backdrop-blur-sm">
-            Kamera kapalı — gökyüzü bonusu için kamerayı aç ve gökyüzüne çevir.
+        <div className="pointer-events-none absolute left-1/2 top-[42%] z-10 w-[min(90%,20rem)] -translate-x-1/2 text-center">
+          <p className="rounded-full bg-black/45 px-3 py-1.5 text-[11px] leading-snug text-fog backdrop-blur-sm">
+            Kamera kapalı — gökyüzü için izin ver
           </p>
         </div>
       )}
