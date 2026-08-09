@@ -33,12 +33,15 @@ export function rollCrash(
   craftId: CraftId = 'drone',
   shielded = false,
   rng: () => number = Math.random,
+  /** Extra crash chance from fighting the wind (skill layer) */
+  riskAdd = 0,
 ): boolean {
   // Always consume RNG so bomb/UFO shields stay fair & verifiable
   const roll = rng()
   if (shielded) return false
   const { crashChance } = getLayerInfo(layer, craftId)
-  return roll < crashChance
+  const chance = Math.min(0.95, crashChance + Math.max(0, riskAdd))
+  return roll < chance
 }
 
 export function getLedLevel(

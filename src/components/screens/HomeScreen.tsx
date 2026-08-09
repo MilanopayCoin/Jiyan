@@ -365,6 +365,60 @@ export function HomeScreen({ game }: Props) {
           </div>
         </div>
 
+        <div className="mb-3 rounded-2xl border border-signal/30 bg-signal/10 px-4 py-3 backdrop-blur-md">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-signal">
+                Haftalık lig · {game.weekKey}
+              </p>
+              <p className="mt-0.5 text-sm text-white">
+                Aynı haftalık seed · {game.daysLeftInWeek} gün kaldı
+              </p>
+            </div>
+            <p className="font-display text-2xl text-signal">
+              {game.weeklyBest?.bestMultiplier
+                ? fmtX(game.weeklyBest.bestMultiplier)
+                : '—'}
+            </p>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-signal"
+              style={{ width: `${game.seasonProgress.pct}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[10px] text-fog">
+            Sezon XP {game.season.xp}
+            {game.seasonProgress.next
+              ? ` · sonraki ${game.seasonProgress.next.label} @ ${game.seasonProgress.next.xp}`
+              : ' · pass tamam'}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={noCredits}
+              onClick={() => void game.startFlight({ weekly: true })}
+              className="flex-1 rounded-xl bg-signal/25 py-2.5 text-sm font-semibold text-signal disabled:opacity-40"
+            >
+              Lig uçuşu
+            </button>
+            <button
+              type="button"
+              onClick={() => game.claimSeason()}
+              className="rounded-xl border border-white/15 px-3 py-2.5 text-sm text-white"
+            >
+              Ödül al
+            </button>
+            <button
+              type="button"
+              onClick={() => game.announceWeekly()}
+              className="rounded-xl border border-white/15 px-3 py-2.5 text-sm text-ice"
+            >
+              Duyur
+            </button>
+          </div>
+        </div>
+
         <div className="mb-3 rounded-2xl border border-ice/25 bg-ice/10 px-4 py-3 backdrop-blur-md">
           <p className="text-xs uppercase tracking-wider text-ice">
             Telegram filo

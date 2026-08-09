@@ -321,6 +321,8 @@ export function applyFlightResult(
   if (result.chatBlind && result.outcome === 'cashed') badges.add('chat-kor')
   if (result.boostTable) badges.add('boost-masa')
   if (result.starsStake && result.starsStake > 0) badges.add('stars-pilot')
+  if ((result.windCatches ?? 0) >= 3) badges.add('ruzgar-ustasi')
+  if (result.weekly && result.outcome === 'cashed') badges.add('sezon-pilot')
   if (result.craftId === 'kite' && result.outcome === 'cashed' && result.layer >= 5) {
     badges.add('arac-kite')
   }
@@ -607,6 +609,9 @@ export const BADGE_LABELS: Record<string, string> = {
   'chat-kor': 'Chat Kör Uçuş',
   'boost-masa': 'Boost Masa',
   'stars-pilot': 'Stars Pilot',
+  'sezon-pilot': 'Sezon Pilot',
+  'ruzgar-ustasi': 'Rüzgar Ustası',
+  'lig-top10': 'Lig Top 10',
   'cuzdan-bagli': 'Cüzdan Bağlı',
   'cuzdan-acildi': 'Kripto Cüzdan',
   'checkin-pilot': 'Check-in Pilotu',

@@ -21,6 +21,29 @@ import {
   pushScore,
 } from '../utils/syncApi'
 import { requestTiltPermission } from '../utils/tilt'
+import {
+  WIND_MISS_RISK,
+  applyWindBonus,
+  sampleWind,
+  windBonusFromCatches,
+  windDirFromSeed,
+  type WindDir,
+} from './wind'
+import {
+  claimPassTier,
+  daysLeftInWeek,
+  grantSeasonXp,
+  loadSeason,
+  loadWeeklyBest,
+  maybeWeeklyTopReward,
+  seasonProgress,
+  updateWeeklyFromFlight,
+  weekKey,
+  weeklySeed,
+  xpForWeeklyFlight,
+  type SeasonState,
+} from './season'
+import { fetchWeeklyRemote, pushWeeklyScore } from '../utils/leagueApi'
 
 function pickBluffLed(
   craftId: CraftId,
@@ -106,6 +129,7 @@ import {
 import {
   getStartParam,
   getTgUser,
+  getWebApp,
   isTelegramMiniApp,
   telegramStartAppLink,
   tgDisplayName,
@@ -173,6 +197,7 @@ interface GameState {
   skyActive: boolean
   challengeMode: boolean
   blindMode: boolean
+  weeklyMode: boolean
   /** UFO may show a lying LED */
   bluffLed: LedLevel | null
   ufoShieldReady: boolean
@@ -181,19 +206,32 @@ interface GameState {
   gazeActive: boolean
   smileActive: boolean
   facePresent: boolean
+  windDir: WindDir | null
+  windAlign: -1 | 0 | 1
+  windBonus: number
+  windCatches: number
 }
 
 type Action =
   | { type: 'SET_SCREEN'; screen: Screen }
   | { type: 'SET_PROFILE'; profile: PlayerProfile }
-  | { type: 'START_FLIGHT'; challenge: boolean; blind: boolean }
+  | {
+      type: 'START_FLIGHT'
+      challenge: boolean
+      blind: boolean
+      weekly: boolean
+      windDir: WindDir | null
+    }
   | {
       type: 'CLIMB_SUCCESS'
       layer: number
       craftId: CraftId
       skyBonus: number
+      windBonus: number
       bluffLed: LedLevel | null
     }
+  | { type: 'SET_WIND_ALIGN'; align: -1 | 0 | 1 }
+  | { type: 'WIND_CATCH'; catches: number; bonus: number }
   | { type: 'CRASH'; result: FlightResult }
   | { type: 'CASH_OUT'; result: FlightResult }
   | { type: 'PATCH_RESULT'; result: FlightResult }
@@ -244,12 +282,17 @@ function initialState(): GameState {
     skyActive: false,
     challengeMode: false,
     blindMode: false,
+    weeklyMode: false,
     bluffLed: null,
     ufoShieldReady: false,
     eyeShieldReady: false,
     gazeActive: false,
     smileActive: false,
     facePresent: false,
+    windDir: null,
+    windAlign: 0,
+    windBonus: 0,
+    windCatches: 0,
   }
 }
 
@@ -260,7 +303,8 @@ function reducer(state: GameState, action: Action): GameState {
     case 'SET_PROFILE':
       return { ...state, profile: action.profile }
     case 'SET_SKY': {
-      const fairLock = state.challengeMode || state.blindMode
+      const fairLock =
+        state.challengeMode || state.blindMode || state.weeklyMode
       const next = {
         ...state,
         skyScore: action.sample.score,
@@ -268,11 +312,16 @@ function reducer(state: GameState, action: Action): GameState {
         skyActive: fairLock ? false : action.sample.active,
       }
       if (!fairLock && state.phase === 'climbing' && state.layer >= 1) {
-        next.multiplier = applySkyBonus(state.baseMultiplier, action.sample.bonus)
+        next.multiplier = applyWindBonus(
+          applySkyBonus(state.baseMultiplier, action.sample.bonus),
+          state.windBonus,
+        )
       }
       return next
     }
-    case 'START_FLIGHT':
+    case 'START_FLIGHT': {
+      const fair =
+        action.challenge || action.blind || action.weekly
       return {
         ...state,
         screen: 'flight',
@@ -290,20 +339,28 @@ function reducer(state: GameState, action: Action): GameState {
         shieldFlash: false,
         challengeMode: action.challenge,
         blindMode: action.blind,
+        weeklyMode: action.weekly,
         bluffLed: null,
         ufoShieldReady: state.profile.selectedCraft === 'ufo',
-        eyeShieldReady: !action.challenge && !action.blind,
+        eyeShieldReady: !fair,
         gazeActive: false,
         smileActive: false,
         facePresent: false,
-        skyBonus: action.challenge || action.blind ? 0 : state.skyBonus,
-        skyActive: action.challenge || action.blind ? false : state.skyActive,
+        skyBonus: fair ? 0 : state.skyBonus,
+        skyActive: fair ? false : state.skyActive,
+        windDir: fair ? null : action.windDir,
+        windAlign: 0,
+        windBonus: 0,
+        windCatches: 0,
       }
+    }
     case 'CLIMB_SUCCESS': {
       const info = getLayerInfo(action.layer, action.craftId)
-      const sky =
-        state.challengeMode || state.blindMode ? 0 : action.skyBonus
-      const boosted = applySkyBonus(info.multiplier, sky)
+      const fair =
+        state.challengeMode || state.blindMode || state.weeklyMode
+      const sky = fair ? 0 : action.skyBonus
+      const wind = fair ? 0 : action.windBonus
+      const boosted = applyWindBonus(applySkyBonus(info.multiplier, sky), wind)
       return {
         ...state,
         phase: 'climbing',
@@ -312,8 +369,17 @@ function reducer(state: GameState, action: Action): GameState {
         multiplier: boosted,
         led: getLedLevel(action.layer, action.craftId),
         bluffLed: action.bluffLed,
+        windBonus: wind,
       }
     }
+    case 'SET_WIND_ALIGN':
+      return { ...state, windAlign: action.align }
+    case 'WIND_CATCH':
+      return {
+        ...state,
+        windCatches: action.catches,
+        windBonus: action.bonus,
+      }
     case 'CRASH':
       return {
         ...state,
@@ -365,12 +431,17 @@ function reducer(state: GameState, action: Action): GameState {
         shieldFlash: false,
         challengeMode: false,
         blindMode: false,
+        weeklyMode: false,
         bluffLed: null,
         ufoShieldReady: false,
         eyeShieldReady: false,
         gazeActive: false,
         smileActive: false,
         facePresent: false,
+        windDir: null,
+        windAlign: 0,
+        windBonus: 0,
+        windCatches: 0,
       }
     case 'RENAME': {
       const profile = { ...state.profile, displayName: action.name }
@@ -431,10 +502,21 @@ export function useGame() {
   const [duelBoard, setDuelBoard] = useState<DuelState | null>(null)
   const [pendingChatBlind, setPendingChatBlind] = useState<string | null>(null)
   const [boostUnlocked, setBoostUnlocked] = useState(() => hasBoostAccess())
+  const [weeklyBoard, setWeeklyBoard] = useState<
+    Awaited<ReturnType<typeof fetchWeeklyRemote>>
+  >([])
+  const [season, setSeason] = useState<SeasonState>(() => loadSeason())
+  const [weeklyBest, setWeeklyBest] = useState(() => loadWeeklyBest())
   const duelIdRef = useRef<string | null>(null)
   const chatBlindRef = useRef<string | null>(null)
   const boostTableRef = useRef(false)
   const starsStakeRef = useRef(0)
+  const weeklyRef = useRef(false)
+  const windDirRef = useRef<WindDir | null>(null)
+  const windCatchesRef = useRef(0)
+  const windAlignRef = useRef<-1 | 0 | 1>(0)
+  const tiltXRef = useRef(0)
+  const tiltYRef = useRef(0)
   const consecutiveRef = useRef(state.consecutiveSafe)
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
@@ -462,10 +544,11 @@ export function useGame() {
   const refreshSync = useCallback(async () => {
     const local = loadFriends()
     const ids = local.map((f) => f.id)
-    const [remoteFriends, daily, top] = await Promise.all([
+    const [remoteFriends, daily, top, weekly] = await Promise.all([
       fetchFriendsRemote(ids),
       fetchDailyRemote(),
       fetchTopRemote(),
+      fetchWeeklyRemote(weekKey()),
     ])
     if (remoteFriends.length) {
       for (const card of remoteFriends) upsertFriend(card)
@@ -473,6 +556,7 @@ export function useGame() {
     }
     setDailyBoard(daily)
     setRemoteTop(top)
+    setWeeklyBoard(weekly)
   }, [])
 
   useEffect(() => {
@@ -685,7 +769,7 @@ export function useGame() {
 
   const setFaceSample = useCallback(
     (sample: { face: boolean; gaze: boolean; smile: boolean }) => {
-      if (state.challengeMode || state.blindMode) {
+      if (state.challengeMode || state.blindMode || state.weeklyMode) {
         gazeRef.current = false
         dispatch({
           type: 'SET_FACE',
@@ -703,8 +787,43 @@ export function useGame() {
         smile: sample.smile,
       })
     },
-    [state.challengeMode, state.blindMode],
+    [state.challengeMode, state.blindMode, state.weeklyMode],
   )
+
+  const setTiltSample = useCallback(
+    (x: number, y: number) => {
+      tiltXRef.current = x
+      tiltYRef.current = y
+      const dir = windDirRef.current
+      if (!dir || weeklyRef.current || challengeRef.current || blindRef.current) {
+        windAlignRef.current = 0
+        return
+      }
+      const sample = sampleWind(dir, x, y)
+      windAlignRef.current = sample.align
+      dispatch({ type: 'SET_WIND_ALIGN', align: sample.align })
+    },
+    [],
+  )
+
+  const windRisk = useCallback(() => {
+    if (challengeRef.current || blindRef.current || weeklyRef.current) return 0
+    return windAlignRef.current === -1 ? WIND_MISS_RISK : 0
+  }, [])
+
+  const noteWindCatch = useCallback(() => {
+    if (challengeRef.current || blindRef.current || weeklyRef.current) return 0
+    if (windAlignRef.current !== 1) return 0
+    windCatchesRef.current += 1
+    const bonus = windBonusFromCatches(windCatchesRef.current)
+    dispatch({
+      type: 'WIND_CATCH',
+      catches: windCatchesRef.current,
+      bonus,
+    })
+    haptic.warn()
+    return bonus
+  }, [])
 
   const persistResult = useCallback((result: FlightResult) => {
     let before = loadProfile()
@@ -767,6 +886,38 @@ export function useGame() {
         settled.outcome,
       )
       if (best) setDailyBest(best)
+    }
+
+    if (settled.weekly) {
+      const w = updateWeeklyFromFlight(
+        settled.multiplier,
+        settled.layer,
+        settled.craftId,
+        settled.outcome,
+      )
+      setWeeklyBest(w)
+      const xp = xpForWeeklyFlight(
+        settled.outcome,
+        settled.multiplier,
+        settled.layer,
+      )
+      setSeason(grantSeasonXp(xp))
+      void pushWeeklyScore(profile, w).then(async () => {
+        const board = await fetchWeeklyRemote(weekKey())
+        setWeeklyBoard(board)
+        const me = getOrCreatePilotId()
+        const rank = board.findIndex((p) => p.id === me) + 1
+        const rewarded = maybeWeeklyTopReward(w, rank > 0 ? rank : null)
+        setSeason(rewarded)
+        if (rank > 0 && rank <= 10) {
+          const p = loadProfile()
+          if (!p.badges.includes('lig-top10')) {
+            const next = { ...p, badges: [...p.badges, 'lig-top10'] }
+            saveProfile(next)
+            dispatch({ type: 'SET_PROFILE', profile: next })
+          }
+        }
+      })
     }
 
     for (let i = 0; i < profile.missions.length; i++) {
@@ -865,6 +1016,7 @@ export function useGame() {
   const startFlight = useCallback(async (opts?: {
     challenge?: boolean
     blind?: boolean
+    weekly?: boolean
     duelId?: string
     chatBlind?: boolean
     boostTable?: boolean
@@ -901,13 +1053,19 @@ export function useGame() {
     const chatTok = opts?.chatBlind
       ? pendingChatBlind || chatBlindToken()
       : null
-    const challenge = Boolean(opts?.challenge) && !duelId && !chatTok
+    const weekly = Boolean(opts?.weekly) && !duelId && !chatTok
+    const challenge =
+      Boolean(opts?.challenge) && !duelId && !chatTok && !weekly
     const blind =
-      (Boolean(opts?.blind) || Boolean(chatTok)) && !challenge && !duelId
+      (Boolean(opts?.blind) || Boolean(chatTok)) &&
+      !challenge &&
+      !duelId &&
+      !weekly
     challengeRef.current = challenge
     blindRef.current = blind
+    weeklyRef.current = weekly
     ufoShieldRef.current = craftId === 'ufo'
-    eyeShieldRef.current = !challenge && !blind && !duelId
+    eyeShieldRef.current = !challenge && !blind && !duelId && !weekly
     eyeShieldUsedRef.current = false
     smileCashOutRef.current = false
     gazeRef.current = false
@@ -915,14 +1073,18 @@ export function useGame() {
     chatBlindRef.current = chatTok
     boostTableRef.current = boostTable
     starsStakeRef.current = useStars ? STARS_FLIGHT_COST : 0
+    windCatchesRef.current = 0
+    windAlignRef.current = 0
 
     const fairSeed = duelId
       ? duelSeed(duelId, craftId)
       : chatTok
         ? chatBlindSeed(chatTok, craftId)
-        : challenge
-          ? `zincir-challenge-${todayKey()}-${craftId}`
-          : makeFlightSeed(blind ? 'blind' : 'normal')
+        : weekly
+          ? weeklySeed(craftId)
+          : challenge
+            ? `zincir-challenge-${todayKey()}-${craftId}`
+            : makeFlightSeed(blind ? 'blind' : 'normal')
     fairSeedRef.current = fairSeed
     fairCommitRef.current = ''
     fairRollsRef.current = 0
@@ -931,6 +1093,9 @@ export function useGame() {
     const commit = await sha256Hex(fairSeed)
     fairCommitRef.current = commit
     setFairCommit(commit)
+    const windDir =
+      challenge || blind || weekly || duelId ? null : windDirFromSeed(fairSeed)
+    windDirRef.current = windDir
 
     let spent: PlayerProfile = { ...profile }
     if (useStars) {
@@ -965,13 +1130,14 @@ export function useGame() {
     void requestTiltPermission()
     haptic.tap(craftId)
     sfx.climb(craftId)
-    dispatch({ type: 'START_FLIGHT', challenge, blind })
+    dispatch({ type: 'START_FLIGHT', challenge, blind, weekly, windDir })
     bombArmedRef.current = false
     bombUsedRef.current = false
     sfx.startProp(craftId)
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
-    const fairLock = () => challengeRef.current || blindRef.current
+    const fairLock = () =>
+      challengeRef.current || blindRef.current || weeklyRef.current
     const stakeMeta = () => ({
       ...(stakeAssetRef.current && stakeAmountRef.current > 0
         ? {
@@ -983,12 +1149,15 @@ export function useGame() {
       ...(chatBlindRef.current ? { chatBlind: true } : {}),
       ...(boostTableRef.current ? { boostTable: true } : {}),
       ...(starsStakeRef.current > 0 ? { starsStake: starsStakeRef.current } : {}),
+      ...(weeklyRef.current ? { weekly: true } : {}),
+      ...(windCatchesRef.current > 0
+        ? { windCatches: windCatchesRef.current }
+        : {}),
     })
-
     window.setTimeout(() => {
       const rng = rngRef.current
       fairRollsRef.current += 1
-      if (rollCrash(1, craftId, false, rng)) {
+      if (rollCrash(1, craftId, false, rng, windRisk())) {
         // Eye-contact shield (front camera) then UFO phase shield
         if (eyeShieldRef.current && gazeRef.current) {
           eyeShieldRef.current = false
@@ -1005,6 +1174,9 @@ export function useGame() {
             layer: 1,
             craftId,
             skyBonus: fairLock() ? 0 : skyBonusRef.current,
+            windBonus: fairLock()
+              ? 0
+              : windBonusFromCatches(windCatchesRef.current),
             bluffLed: pickBluffLed(craftId, 1, real),
           })
           return
@@ -1023,6 +1195,9 @@ export function useGame() {
             layer: 1,
             craftId,
             skyBonus: fairLock() ? 0 : skyBonusRef.current,
+            windBonus: fairLock()
+              ? 0
+              : windBonusFromCatches(windCatchesRef.current),
             bluffLed: pickBluffLed(craftId, 1, real),
           })
           return
@@ -1055,6 +1230,7 @@ export function useGame() {
           dispatch({ type: 'FLASH_OFF' })
         }, 900)
       } else {
+        noteWindCatch()
         haptic.climb(craftId)
         sfx.setPropLayer(1, craftId)
         const real = getLedLevel(1, craftId)
@@ -1063,12 +1239,22 @@ export function useGame() {
           layer: 1,
           craftId,
           skyBonus: fairLock() ? 0 : skyBonusRef.current,
+          windBonus: fairLock()
+            ? 0
+            : windBonusFromCatches(windCatchesRef.current),
           bluffLed: pickBluffLed(craftId, 1, real),
         })
       }
     }, takeoffMs)
     return true
-  }, [persistResult, enrichResult, pendingChatBlind, boostUnlocked])
+  }, [
+    persistResult,
+    enrichResult,
+    pendingChatBlind,
+    boostUnlocked,
+    noteWindCatch,
+    windRisk,
+  ])
 
   const armBomb = useCallback(() => {
     if (state.challengeMode || state.blindMode || challengeRef.current || blindRef.current)
@@ -1109,7 +1295,8 @@ export function useGame() {
     const skinId = skinRef.current
     const challenge = challengeRef.current
     const blind = blindRef.current
-    const fairLock = challenge || blind
+    const weekly = weeklyRef.current
+    const fairLock = challenge || blind || weekly
     const shielded = fairLock ? false : bombArmedRef.current
     const skyB = fairLock ? 0 : skyBonusRef.current
     void sfx.unlock()
@@ -1132,7 +1319,7 @@ export function useGame() {
 
     window.setTimeout(() => {
       fairRollsRef.current += 1
-      if (rollCrash(nextLayer, craftId, shielded, rngRef.current)) {
+      if (rollCrash(nextLayer, craftId, shielded, rngRef.current, windRisk())) {
         if (eyeShieldRef.current && gazeRef.current) {
           eyeShieldRef.current = false
           eyeShieldUsedRef.current = true
@@ -1147,6 +1334,9 @@ export function useGame() {
             layer: nextLayer,
             craftId,
             skyBonus: skyB,
+            windBonus: fairLock
+              ? 0
+              : windBonusFromCatches(windCatchesRef.current),
             bluffLed: pickBluffLed(craftId, nextLayer, real),
           })
           animatingRef.current = false
@@ -1165,6 +1355,9 @@ export function useGame() {
             layer: nextLayer,
             craftId,
             skyBonus: skyB,
+            windBonus: fairLock
+              ? 0
+              : windBonusFromCatches(windCatchesRef.current),
             bluffLed: pickBluffLed(craftId, nextLayer, real),
           })
           animatingRef.current = false
@@ -1183,7 +1376,9 @@ export function useGame() {
           skyBonus: skyB,
           challenge,
           blind,
+          weekly,
           eyeShieldUsed: eyeShieldUsedRef.current,
+          windCatches: windCatchesRef.current || undefined,
           ...(stakeAssetRef.current && stakeAmountRef.current > 0
             ? {
                 stakeAsset: stakeAssetRef.current,
@@ -1209,6 +1404,7 @@ export function useGame() {
           animatingRef.current = false
         }, 1000)
       } else {
+        noteWindCatch()
         sfx.setPropLayer(nextLayer, craftId)
         const led = getLedLevel(nextLayer, craftId)
         sfx.setStatic(led === 'critical' ? 0.85 : led === 'caution' ? 0.4 : 0.1)
@@ -1217,12 +1413,23 @@ export function useGame() {
           layer: nextLayer,
           craftId,
           skyBonus: skyB,
+          windBonus: fairLock
+            ? 0
+            : windBonusFromCatches(windCatchesRef.current),
           bluffLed: pickBluffLed(craftId, nextLayer, led),
         })
         animatingRef.current = false
       }
     }, delay)
-  }, [state.phase, state.layer, state.multiplier, persistResult, enrichResult])
+  }, [
+    state.phase,
+    state.layer,
+    state.multiplier,
+    persistResult,
+    enrichResult,
+    noteWindCatch,
+    windRisk,
+  ])
 
   const cashOut = useCallback(() => {
     if (animatingRef.current) return
@@ -1249,9 +1456,11 @@ export function useGame() {
       skyBonus: skyB,
       challenge,
       blind,
+      weekly: weeklyRef.current,
       ufoShieldUsed: craftId === 'ufo' && !ufoShieldRef.current,
       eyeShieldUsed: eyeShieldUsedRef.current,
       smileCashOut: smileCashOutRef.current,
+      windCatches: windCatchesRef.current || undefined,
       ...(stakeAssetRef.current && stakeAmountRef.current > 0
         ? {
             stakeAsset: stakeAssetRef.current,
@@ -1551,9 +1760,16 @@ export function useGame() {
     Math.max(1, state.layer + 1),
     state.profile.selectedCraft,
   )
-  const previewNextMultiplier = applySkyBonus(
-    nextLayer.multiplier,
-    state.challengeMode || state.blindMode ? 0 : state.skyBonus,
+  const previewNextMultiplier = applyWindBonus(
+    applySkyBonus(
+      nextLayer.multiplier,
+      state.challengeMode || state.blindMode || state.weeklyMode
+        ? 0
+        : state.skyBonus,
+    ),
+    state.challengeMode || state.blindMode || state.weeklyMode
+      ? 0
+      : state.windBonus,
   )
 
   const displayLed = state.bluffLed ?? state.led
@@ -1712,6 +1928,42 @@ export function useGame() {
     return url
   }, [pendingChatBlind])
 
+  const claimSeason = useCallback(() => {
+    const res = claimPassTier(loadProfile())
+    saveProfile(res.profile)
+    dispatch({ type: 'SET_PROFILE', profile: res.profile })
+    setSeason(res.season)
+    if (res.claimed.length) {
+      setRetentionHint(
+        `Sezon: ${res.claimed.map((t) => t.label).join(', ')}`,
+      )
+      haptic.unlock()
+      window.setTimeout(() => setRetentionHint(null), 3200)
+    } else {
+      setRetentionHint('Henüz açılacak ödül yok')
+      window.setTimeout(() => setRetentionHint(null), 2200)
+    }
+    return res.claimed.length > 0
+  }, [])
+
+  const announceWeekly = useCallback(() => {
+    const channel = (
+      import.meta.env.VITE_TELEGRAM_CHANNEL as string | undefined
+    )?.replace(/^@/, '')
+    const wk = weekKey()
+    const best = loadWeeklyBest()
+    const text = best
+      ? `Zincir haftalık lig ${wk}: rekor ${fmtX(best.bestMultiplier)} (K${best.bestLayer})`
+      : `Zincir haftalık lig ${wk} — katıl!`
+    if (channel && isTelegramMiniApp()) {
+      getWebApp().openTelegramLink(`https://t.me/${channel}`)
+    }
+    tgShareUrl(
+      telegramStartAppLink(getOrCreatePilotId()) || location.href,
+      text,
+    )
+  }, [])
+
   const completeSelfie = useCallback(() => {
     const result = state.result
     if (!result || result.outcome !== 'cashed' || result.selfieCaptured) {
@@ -1744,7 +1996,10 @@ export function useGame() {
     purchaseBomb,
     setSkySample,
     setFaceSample,
+    setTiltSample,
     completeSelfie,
+    claimSeason,
+    announceWeekly,
     createDuel,
     startDuelFlight,
     startChatBlindFlight,
@@ -1766,6 +2021,30 @@ export function useGame() {
     pendingChatBlind,
     boostUnlocked,
     starsFlightCost: STARS_FLIGHT_COST,
+    weeklyBest,
+    weeklyBoard,
+    weeklyLeaderboard: [
+      ...weeklyBoard.map((e) => ({
+        ...e,
+        isYou: e.id === getOrCreatePilotId(),
+      })),
+      ...(weeklyBoard.some((e) => e.id === getOrCreatePilotId())
+        ? []
+        : [
+            {
+              id: getOrCreatePilotId(),
+              name: `${state.profile.displayName} (Sen)`,
+              bestMultiplier: weeklyBest?.bestMultiplier || 0,
+              bestLayer: weeklyBest?.bestLayer || 0,
+              streak: weeklyBest?.flights || 0,
+              isYou: true as const,
+            },
+          ]),
+    ].sort((a, b) => b.bestMultiplier - a.bestMultiplier),
+    season,
+    seasonProgress: seasonProgress(season),
+    weekKey: weekKey(),
+    daysLeftInWeek: daysLeftInWeek(),
     goHome,
     setScreen,
     hideTip,

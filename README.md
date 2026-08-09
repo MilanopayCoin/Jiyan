@@ -59,6 +59,8 @@ Telegram filo özellikleri:
 - **Story iniş** — sonuç kartı → `shareToStory` (`/api/story-media`)
 - **Chat kör uçuş** — grup seed · `startapp=cb_<token>`
 - **Stars bahis** — 50⭐ / uçuş · `TELEGRAM_BOT_TOKEN` + `/api/stars-invoice` (yoksa demo credit)
+- **Rüzgar düellosu** — seed rüzgar yönü · tilt ile yakala (+%5, max +%20) / ters yatınca risk
+- **Haftalık lig + season pass** — ISO week seed · `/api/league` · XP → skin fragment (3=unlock) · top 10 ödülü
 
 ### Phantom / Solana
 

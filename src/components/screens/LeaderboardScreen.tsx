@@ -14,7 +14,7 @@ interface Props {
   game: GameApi
 }
 
-type Tab = 'global' | 'friends' | 'daily'
+type Tab = 'global' | 'friends' | 'daily' | 'weekly'
 
 export function LeaderboardScreen({ game }: Props) {
   const [tab, setTab] = useState<Tab>('global')
@@ -27,7 +27,9 @@ export function LeaderboardScreen({ game }: Props) {
       ? game.leaderboard
       : tab === 'friends'
         ? game.friendsLeaderboard
-        : game.dailyLeaderboard
+        : tab === 'weekly'
+          ? game.weeklyLeaderboard
+          : game.dailyLeaderboard
 
   useEffect(() => {
     void game.refreshSync()
@@ -101,6 +103,7 @@ export function LeaderboardScreen({ game }: Props) {
             ['global', 'Global'],
             ['friends', 'Arkadaşlar'],
             ['daily', 'Günlük'],
+            ['weekly', 'Lig'],
           ] as const
         ).map(([t, label]) => (
           <button
@@ -161,6 +164,36 @@ export function LeaderboardScreen({ game }: Props) {
           >
             Skorunu paylaş
           </button>
+        </div>
+      )}
+
+      {tab === 'weekly' && (
+        <div className="mt-4 space-y-2 rounded-2xl border border-signal/25 bg-signal/10 px-3 py-2.5">
+          <p className="text-xs text-signal">
+            {game.weekKey} · top 10 skin fragment · {game.daysLeftInWeek} gün
+          </p>
+          <p className="text-[10px] text-fog">
+            Sezon XP {game.season.xp} · fragment{' '}
+            {Object.entries(game.season.fragments)
+              .map(([k, v]) => `${k}:${v}`)
+              .join(' ') || 'yok'}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => game.claimSeason()}
+              className="rounded-lg bg-signal/20 px-3 py-1.5 text-xs text-signal"
+            >
+              Pass ödülü
+            </button>
+            <button
+              type="button"
+              onClick={() => game.announceWeekly()}
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white"
+            >
+              TG duyur
+            </button>
+          </div>
         </div>
       )}
 

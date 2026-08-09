@@ -225,6 +225,14 @@ export function ResultScreen({ game }: Props) {
           {result.starsStake != null && result.starsStake > 0 && (
             <p className="mt-2 text-xs text-amber">-{result.starsStake} Stars</p>
           )}
+          {(result.windCatches ?? 0) > 0 && (
+            <p className="mt-2 text-xs text-ice">
+              Rüzgar {result.windCatches}× yakalandı
+            </p>
+          )}
+          {result.weekly && (
+            <p className="mt-2 text-xs text-signal">Haftalık lig uçuşu</p>
+          )}
           {game.retentionHint && (
             <p className="mt-2 text-xs text-signal">{game.retentionHint}</p>
           )}

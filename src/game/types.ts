@@ -88,6 +88,10 @@ export interface FlightResult {
   boostTable?: boolean
   /** Stars spent for this flight */
   starsStake?: number
+  /** Wind catches during flight (tilt skill) */
+  windCatches?: number
+  /** Weekly league flight */
+  weekly?: boolean
 }
 
 export interface DailyMission {

@@ -3,6 +3,7 @@ import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
 import { formatUsd, toUsdcAmount } from '../../game/stableEconomy'
 import { shortCommit } from '../../game/fairness'
+import { windLabel } from '../../game/wind'
 
 interface Props {
   game: GameApi
@@ -51,6 +52,30 @@ export function FlightScreen({ game }: Props) {
         {game.fairCommit && (
           <p className="mb-2 text-center font-mono text-[10px] text-fog">
             fair {shortCommit(game.fairCommit)}
+          </p>
+        )}
+        {game.weeklyMode && (
+          <p className="mb-2 text-center font-display text-sm tracking-[0.2em] text-amber">
+            HAFTALIK LİG · {game.weekKey}
+          </p>
+        )}
+        {game.windDir && !game.weeklyMode && !game.challengeMode && !game.blindMode && (
+          <p
+            className={`mb-2 text-center text-xs ${
+              game.windAlign === 1
+                ? 'text-signal'
+                : game.windAlign === -1
+                  ? 'text-danger'
+                  : 'text-ice'
+            }`}
+          >
+            {windLabel(game.windDir)}
+            {game.windAlign === 1
+              ? ` · yakalandı +${Math.round(game.windBonus * 100)}%`
+              : game.windAlign === -1
+                ? ' · ters rüzgar · risk!'
+                : ' · telefonu rüzgara yatır'}
+            {game.windCatches > 0 ? ` · ${game.windCatches} yakala` : ''}
           </p>
         )}
         {game.eyeShieldReady && (

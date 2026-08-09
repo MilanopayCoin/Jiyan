@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { CameraBackground } from './components/CameraBackground'
 import { FrontFaceOverlay } from './components/FrontFaceOverlay'
 import { DroneScene } from './components/DroneScene'
@@ -34,6 +35,11 @@ export default function App() {
   const tiltEnabled =
     game.screen === 'flight' || game.screen === 'home' || game.screen === 'result'
   const tilt = useTilt(tiltEnabled)
+
+  useEffect(() => {
+    if (game.screen !== 'flight' || !tilt.allowed) return
+    game.setTiltSample(tilt.x, tilt.y)
+  }, [game.screen, game.setTiltSample, tilt.allowed, tilt.x, tilt.y])
 
   const inFlight = game.screen === 'flight' && game.phase === 'climbing'
   const layerForWind = inFlight ? game.layer : 0
