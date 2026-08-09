@@ -34,9 +34,11 @@ export function rollCrash(
   shielded = false,
   rng: () => number = Math.random,
 ): boolean {
+  // Always consume RNG so bomb/UFO shields stay fair & verifiable
+  const roll = rng()
   if (shielded) return false
   const { crashChance } = getLayerInfo(layer, craftId)
-  return rng() < crashChance
+  return roll < crashChance
 }
 
 export function getLedLevel(

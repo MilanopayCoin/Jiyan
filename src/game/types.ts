@@ -64,6 +64,16 @@ export interface FlightResult {
   stakeAsset?: import('./assets').AssetId
   stakeAmount?: number
   payoutAmount?: number
+  /** USDC-equivalent stake/payout for receipts */
+  usdcStake?: number
+  usdcPayout?: number
+  /** Provably-fair reveal */
+  fairSeed?: string
+  fairCommit?: string
+  fairRolls?: number
+  fairCrashFlags?: boolean[]
+  /** Ledger entry id for this flight settlement */
+  ledgerId?: string
 }
 
 export interface DailyMission {

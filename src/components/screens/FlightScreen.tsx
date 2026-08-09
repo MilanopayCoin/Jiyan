@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
+import { formatUsd, toUsdcAmount } from '../../game/stableEconomy'
+import { shortCommit } from '../../game/fairness'
 
 interface Props {
   game: GameApi
@@ -18,6 +20,12 @@ export function FlightScreen({ game }: Props) {
         : 'text-danger'
   const skyLabel = game.formatSkyBonus(game.skyBonus)
   const deepBlind = game.blindMode && game.layer >= 3
+  const stakeUsdc = game.profile.payWithCrypto
+    ? toUsdcAmount(game.profile.stakeAmount || 1, game.profile.payAsset)
+    : 0
+  const potentialUsdc =
+    game.layer >= 1 && stakeUsdc > 0 ? stakeUsdc * game.multiplier : stakeUsdc
+  const nextUsdc = stakeUsdc > 0 ? stakeUsdc * game.previewNextMultiplier : 0
 
   return (
     <div className="relative z-20 flex h-full flex-col">
@@ -40,6 +48,11 @@ export function FlightScreen({ game }: Props) {
               : ''}
           </p>
         )}
+        {game.fairCommit && (
+          <p className="mb-2 text-center font-mono text-[10px] text-fog">
+            fair {shortCommit(game.fairCommit)}
+          </p>
+        )}
         {game.profile.selectedCraft === 'ufo' && game.ufoShieldReady && (
           <p className="mb-2 text-center text-xs text-signal">
             UFO faz kalkanı hazır · 1 kaçış
@@ -56,12 +69,15 @@ export function FlightScreen({ game }: Props) {
             <p className="font-display text-3xl text-white">
               {deepBlind ? '?' : `K${game.layer || '—'}`}
             </p>
+            {stakeUsdc > 0 && (
+              <p className="mt-1 text-xs text-fog">bahis {formatUsd(stakeUsdc)}</p>
+            )}
           </div>
           <motion.div
             key={`${game.multiplier}-${game.skyBonus}-${led}`}
             initial={{ scale: 1.25, opacity: 0.4 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-right"
+            className="text-center"
           >
             <p className="text-xs uppercase tracking-[0.2em] text-fog">Çarpan</p>
             <p
@@ -69,6 +85,11 @@ export function FlightScreen({ game }: Props) {
             >
               {game.layer === 0 ? '—' : deepBlind ? '??x' : fmtX(game.multiplier)}
             </p>
+            {stakeUsdc > 0 && game.layer >= 1 && !deepBlind && (
+              <p className="mt-1 font-display text-lg text-signal">
+                {formatUsd(potentialUsdc)} USDC
+              </p>
+            )}
             {game.skyActive && !game.blindMode && (
               <p className="text-xs font-medium text-ice">gökyüzü {skyLabel}</p>
             )}
@@ -138,7 +159,9 @@ export function FlightScreen({ game }: Props) {
         <p className="mb-3 text-center text-xs text-fog">
           {deepBlind
             ? 'Sonraki katman gizli'
-            : `Sonraki katman ≈ ${fmtX(game.previewNextMultiplier)}`}
+            : `Sonraki ≈ ${fmtX(game.previewNextMultiplier)}${
+                nextUsdc > 0 ? ` · ${formatUsd(nextUsdc)} USDC` : ''
+              }`}
           {game.bombArmed ? ' · kalkanlı' : ''}
           {game.skyActive && !game.blindMode ? ` · gökyüzü ${skyLabel}` : ''}
         </p>
@@ -193,7 +216,11 @@ export function FlightScreen({ game }: Props) {
             <span className="font-display text-3xl tracking-wide text-ink">
               İNDİR
             </span>
-            <span className="mt-1 block text-xs text-ink/70">Kazancı kilitle</span>
+            <span className="mt-1 block text-xs text-ink/70">
+              {stakeUsdc > 0 && game.layer >= 1 && !deepBlind
+                ? `Kilitle ${formatUsd(potentialUsdc)}`
+                : 'Kazancı kilitle'}
+            </span>
           </motion.button>
         </div>
       </div>

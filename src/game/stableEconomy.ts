@@ -37,9 +37,29 @@ export function ensurePlayAsset(id: unknown): StableId | HighRollerId {
 
 export function formatUsd(amount: number): string {
   const n = Number(amount) || 0
-  if (Math.abs(n) < 0.005) return '$0'
-  if (Math.abs(n) < 10) return `$${n.toFixed(2)}`
+  if (Math.abs(n) < 0.005) return '$0.00'
   return `$${n.toFixed(2)}`
+}
+
+/** Signed USDC line for receipts: +$3.40 / −$1.00 */
+export function formatUsdcDelta(amount: number): string {
+  const n = Number(amount) || 0
+  const abs = formatUsd(Math.abs(n))
+  if (n > 0.0005) return `+${abs} USDC`
+  if (n < -0.0005) return `−${abs.slice(1)} USDC`
+  return `${abs} USDC`
+}
+
+export function formatPlayAmount(
+  amount: number,
+  asset: AssetId,
+  highRoller = false,
+): string {
+  const usdc = toUsdcAmount(amount, asset)
+  if (!highRoller || isStableAsset(asset)) {
+    return `${formatUsd(usdc)} USDC`
+  }
+  return `${formatUsd(usdc)} USDC · ${ASSETS[asset].symbol}`
 }
 
 export function assetToUsd(amount: number, asset: AssetId): number {

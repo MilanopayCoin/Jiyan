@@ -2,11 +2,18 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { fmtX, getLayerInfo, getLedLevel, rollCrash, todayKey } from './math'
 import {
   createRng,
-  dailyChallengeSeed,
   loadDailyBest,
   updateDailyBestFromFlight,
   type DailyBest,
 } from './challenge'
+import {
+  makeFlightSeed,
+  replayCrashFlags,
+  rngSeedFromString,
+  sha256Hex,
+  stakeAsUsdc,
+} from './fairness'
+import { toUsdcAmount } from './stableEconomy'
 import {
   fetchDailyRemote,
   fetchFriendsRemote,
@@ -145,6 +152,7 @@ type Action =
     }
   | { type: 'CRASH'; result: FlightResult }
   | { type: 'CASH_OUT'; result: FlightResult }
+  | { type: 'PATCH_RESULT'; result: FlightResult }
   | { type: 'SET_PHASE'; phase: FlightPhase }
   | { type: 'SHAKE_OFF' }
   | { type: 'WIND_SHAKE_ON' }
@@ -266,6 +274,8 @@ function reducer(state: GameState, action: Action): GameState {
         result: action.result,
         bombArmed: false,
       }
+    case 'PATCH_RESULT':
+      return { ...state, result: action.result }
     case 'SET_PHASE':
       return { ...state, phase: action.phase }
     case 'SHAKE_OFF':
@@ -355,6 +365,10 @@ export function useGame() {
   const stakeAssetRef = useRef<AssetId | null>(null)
   const stakeAmountRef = useRef(0)
   const cashOutRef = useRef<() => void>(() => {})
+  const fairSeedRef = useRef('')
+  const fairCommitRef = useRef('')
+  const fairRollsRef = useRef(0)
+  const [fairCommit, setFairCommit] = useState('')
 
   const refreshSync = useCallback(async () => {
     const local = loadFriends()
@@ -448,44 +462,63 @@ export function useGame() {
 
   const persistResult = useCallback((result: FlightResult) => {
     let before = loadProfile()
+    let settled = result
 
     // Crypto payout on safe landing (stake already deducted at takeoff)
     if (
-      result.outcome === 'cashed' &&
-      result.stakeAsset &&
-      result.stakeAmount &&
-      result.stakeAmount > 0
+      settled.outcome === 'cashed' &&
+      settled.stakeAsset &&
+      settled.stakeAmount &&
+      settled.stakeAmount > 0
     ) {
-      const payout = roundAsset(result.stakeAmount * result.multiplier, result.stakeAsset)
-      const paid = creditPayout(before, result.stakeAsset, payout, result.multiplier)
+      const payout = roundAsset(
+        settled.stakeAmount * settled.multiplier,
+        settled.stakeAsset,
+      )
+      const paid = creditPayout(
+        before,
+        settled.stakeAsset,
+        payout,
+        settled.multiplier,
+      )
       if (paid.ok) {
         before = { ...before, ...paid.profilePatch, balances: paid.balances }
         saveProfile(before)
-        result = { ...result, payoutAmount: payout }
+        settled = {
+          ...settled,
+          payoutAmount: payout,
+          ledgerId: paid.entry.id,
+          usdcPayout: toUsdcAmount(payout, settled.stakeAsset),
+        }
       }
     } else if (
-      result.outcome === 'crashed' &&
-      result.stakeAsset &&
-      result.stakeAmount &&
-      result.stakeAmount > 0
+      settled.outcome === 'crashed' &&
+      settled.stakeAsset &&
+      settled.stakeAmount &&
+      settled.stakeAmount > 0
     ) {
-      recordCrashStake(result.stakeAsset, result.stakeAmount)
+      recordCrashStake(settled.stakeAsset, settled.stakeAmount)
+      settled = {
+        ...settled,
+        usdcPayout: -stakeAsUsdc(settled.stakeAmount, settled.stakeAsset),
+      }
     }
 
     const { profile, consecutiveSafe } = applyFlightResult(
       before,
-      result,
+      settled,
       consecutiveRef.current,
     )
     consecutiveRef.current = consecutiveSafe
+    dispatch({ type: 'PATCH_RESULT', result: settled })
     dispatch({ type: 'SET_PROFILE', profile })
 
-    if (result.challenge) {
+    if (settled.challenge) {
       const best = updateDailyBestFromFlight(
-        result.multiplier,
-        result.layer,
-        result.craftId,
-        result.outcome,
+        settled.multiplier,
+        settled.layer,
+        settled.craftId,
+        settled.outcome,
       )
       if (best) setDailyBest(best)
     }
@@ -497,8 +530,8 @@ export function useGame() {
         void notifyMissionComplete(after.label)
       }
     }
-    if (result.outcome === 'cashed') {
-      void notifySafeLanding(fmtX(result.multiplier))
+    if (settled.outcome === 'cashed') {
+      void notifySafeLanding(fmtX(settled.multiplier))
     }
 
     void pushScore(profile).then((ok) => {
@@ -506,6 +539,35 @@ export function useGame() {
     })
     return consecutiveSafe
   }, [refreshSync])
+
+  const enrichResult = useCallback((result: FlightResult): FlightResult => {
+    const seed = fairSeedRef.current
+    const commit = fairCommitRef.current
+    const rolls = fairRollsRef.current
+    const flags = seed ? replayCrashFlags(seed, result.craftId, rolls) : []
+    const usdcStake =
+      result.stakeAsset && result.stakeAmount != null
+        ? stakeAsUsdc(result.stakeAmount, result.stakeAsset)
+        : undefined
+    const usdcPayout =
+      result.stakeAsset && result.stakeAmount != null
+        ? result.outcome === 'cashed'
+          ? toUsdcAmount(
+              result.payoutAmount ?? result.stakeAmount * result.multiplier,
+              result.stakeAsset,
+            )
+          : -usdcStake!
+        : undefined
+    return {
+      ...result,
+      fairSeed: seed || undefined,
+      fairCommit: commit || undefined,
+      fairRolls: rolls || undefined,
+      fairCrashFlags: flags.length ? flags : undefined,
+      usdcStake,
+      usdcPayout,
+    }
+  }, [])
 
   const addFriend = useCallback((card: FriendCard) => {
     const me = getOrCreatePilotId()
@@ -539,7 +601,7 @@ export function useGame() {
     setNotifOn(false)
   }, [])
 
-  const startFlight = useCallback((opts?: { challenge?: boolean; blind?: boolean }) => {
+  const startFlight = useCallback(async (opts?: { challenge?: boolean; blind?: boolean }) => {
     const profile = loadProfile()
     let payAsset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdc'
     if (!profile.highRoller && payAsset !== 'usdt' && payAsset !== 'usdc') {
@@ -571,9 +633,18 @@ export function useGame() {
     challengeRef.current = challenge
     blindRef.current = blind
     ufoShieldRef.current = craftId === 'ufo'
-    rngRef.current = challenge
-      ? createRng(dailyChallengeSeed(todayKey(), craftId))
-      : Math.random
+
+    const fairSeed = challenge
+      ? `zincir-challenge-${todayKey()}-${craftId}`
+      : makeFlightSeed(blind ? 'blind' : 'normal')
+    fairSeedRef.current = fairSeed
+    fairCommitRef.current = ''
+    fairRollsRef.current = 0
+    setFairCommit('')
+    rngRef.current = createRng(rngSeedFromString(fairSeed))
+    const commit = await sha256Hex(fairSeed)
+    fairCommitRef.current = commit
+    setFairCommit(commit)
 
     let spent: PlayerProfile = { ...profile }
     if (useCrypto) {
@@ -618,6 +689,7 @@ export function useGame() {
 
     window.setTimeout(() => {
       const rng = rngRef.current
+      fairRollsRef.current += 1
       if (rollCrash(1, craftId, false, rng)) {
         // UFO phase shield can absorb even takeoff crash
         if (ufoShieldRef.current) {
@@ -640,7 +712,7 @@ export function useGame() {
         }
         const near = getLayerInfo(1, craftId)
         const skyB = fairLock() ? 0 : skyBonusRef.current
-        const result: FlightResult = {
+        const result = enrichResult({
           outcome: 'crashed',
           layer: 0,
           multiplier: 1,
@@ -653,7 +725,7 @@ export function useGame() {
           challenge: challengeRef.current,
           blind: blindRef.current,
           ...stakeMeta(),
-        }
+        })
         haptic.crash(craftId)
         sfx.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -678,7 +750,7 @@ export function useGame() {
       }
     }, takeoffMs)
     return true
-  }, [persistResult])
+  }, [persistResult, enrichResult])
 
   const armBomb = useCallback(() => {
     if (state.challengeMode || state.blindMode || challengeRef.current || blindRef.current)
@@ -741,6 +813,7 @@ export function useGame() {
     }
 
     window.setTimeout(() => {
+      fairRollsRef.current += 1
       if (rollCrash(nextLayer, craftId, shielded, rngRef.current)) {
         if (ufoShieldRef.current) {
           ufoShieldRef.current = false
@@ -761,7 +834,7 @@ export function useGame() {
           return
         }
         const near = getLayerInfo(nextLayer, craftId)
-        const result: FlightResult = {
+        const result = enrichResult({
           outcome: 'crashed',
           layer: state.layer,
           multiplier: state.multiplier,
@@ -779,7 +852,7 @@ export function useGame() {
                 stakeAmount: stakeAmountRef.current,
               }
             : {}),
-        }
+        })
         haptic.crash(craftId)
         sfx.crash(craftId)
         dispatch({ type: 'CRASH', result })
@@ -805,7 +878,7 @@ export function useGame() {
         animatingRef.current = false
       }
     }, delay)
-  }, [state.phase, state.layer, state.multiplier, persistResult])
+  }, [state.phase, state.layer, state.multiplier, persistResult, enrichResult])
 
   const cashOut = useCallback(() => {
     if (animatingRef.current) return
@@ -820,7 +893,7 @@ export function useGame() {
     haptic.land(craftId)
     sfx.land(craftId)
     const near = getLayerInfo(state.layer + 1, craftId)
-    const result: FlightResult = {
+    const result = enrichResult({
       outcome: 'cashed',
       layer: state.layer,
       multiplier: state.multiplier,
@@ -843,7 +916,7 @@ export function useGame() {
             ),
           }
         : {}),
-    }
+    })
     dispatch({ type: 'CASH_OUT', result })
     persistResult(result)
     window.setTimeout(() => {
@@ -851,7 +924,7 @@ export function useGame() {
       dispatch({ type: 'SET_SCREEN', screen: 'result' })
       animatingRef.current = false
     }, 900)
-  }, [state.phase, state.layer, state.multiplier, persistResult])
+  }, [state.phase, state.layer, state.multiplier, persistResult, enrichResult])
 
   cashOutRef.current = cashOut
 
@@ -1187,6 +1260,7 @@ export function useGame() {
     canCheckInToday: canCheckIn(state.profile),
     checkInPreview: previewCheckIn(state.profile),
     retentionHint,
+    fairCommit,
     notifOn,
     notifPermission: notifPermission(),
     dailyBest,

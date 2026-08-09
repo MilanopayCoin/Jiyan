@@ -1,11 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { fmtX } from '../../game/math'
 import type { GameApi } from '../../game/useGame'
 import { CRAFTS, SKINS } from '../../game/vehicles'
 import { shareResultCard } from '../../utils/shareCard'
 import { sfx } from '../../utils/audio'
-import { formatAsset } from '../../game/assets'
+import {
+  formatPayoutUsdc,
+  formatStakeUsdc,
+  receiptLine,
+  rngSeedFromString,
+  shortCommit,
+  verifyCommit,
+  verifyFairness,
+} from '../../game/fairness'
+import { formatUsdcDelta, formatUsd } from '../../game/stableEconomy'
 
 interface Props {
   game: GameApi
@@ -15,12 +24,60 @@ export function ResultScreen({ game }: Props) {
   const result = game.result
   const [shareHint, setShareHint] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const fairVerified = useMemo(() => {
+    if (!result?.fairSeed || result.fairCrashFlags == null) return null
+    return verifyFairness(
+      {
+        seed: result.fairSeed,
+        commit: result.fairCommit || '',
+        rngSeed: rngSeedFromString(result.fairSeed),
+        rolls: result.fairRolls ?? result.fairCrashFlags.length,
+        crashFlags: result.fairCrashFlags,
+      },
+      result.craftId,
+    )
+  }, [result])
+
+  const [commitOk, setCommitOk] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!result?.fairSeed || !result.fairCommit) {
+      setCommitOk(null)
+      return
+    }
+    let alive = true
+    void verifyCommit(result.fairSeed, result.fairCommit).then((ok) => {
+      if (alive) setCommitOk(ok)
+    })
+    return () => {
+      alive = false
+    }
+  }, [result?.fairSeed, result?.fairCommit])
+
+  const fairBadge =
+    fairVerified == null
+      ? null
+      : fairVerified && commitOk !== false
+        ? true
+        : false
+
   if (!result) return null
 
   const won = result.outcome === 'cashed'
   const craft = CRAFTS[result.craftId]
   const skin = SKINS[result.skinId]
   const rare = skin.rarity !== 'common'
+
+  const copy = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(label)
+      window.setTimeout(() => setCopied(null), 2000)
+    } catch {
+      setCopied('kopyalanamadı')
+    }
+  }
 
   const share = async () => {
     if (sharing) return
@@ -41,6 +98,13 @@ export function ResultScreen({ game }: Props) {
       window.setTimeout(() => setShareHint(null), 2800)
     }
   }
+
+  const usdcLine =
+    result.usdcPayout != null
+      ? formatUsdcDelta(result.usdcPayout)
+      : result.stakeAsset
+        ? formatPayoutUsdc(result)
+        : null
 
   return (
     <div className="relative z-30 flex h-full flex-col items-center justify-end px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
@@ -82,17 +146,25 @@ export function ResultScreen({ game }: Props) {
           >
             {won ? fmtX(result.multiplier) : '0x'}
           </p>
-          <p className="mt-2 text-sm text-fog">
-            Katman {result.layer || 0}
-            {won ? ' · kilitlendi' : ' · kazanç sıfır'}
-          </p>
-          {result.stakeAsset && result.stakeAmount != null && (
-            <p className="mt-2 text-sm text-amber">
-              {won
-                ? `+${formatAsset(result.payoutAmount ?? result.stakeAmount * result.multiplier, result.stakeAsset)}`
-                : `−${formatAsset(result.stakeAmount, result.stakeAsset)} kayıp`}
+
+          {usdcLine && (
+            <p
+              className={`mt-3 font-display text-3xl ${
+                won ? 'text-signal' : 'text-danger'
+              }`}
+            >
+              {usdcLine}
             </p>
           )}
+
+          <p className="mt-2 text-sm text-fog">
+            Katman {result.layer || 0}
+            {result.usdcStake != null
+              ? ` · bahis ${formatUsd(result.usdcStake)} USDC`
+              : won
+                ? ' · kilitlendi'
+                : ' · kazanç sıfır'}
+          </p>
 
           {!won && (
             <motion.p
@@ -117,11 +189,73 @@ export function ResultScreen({ game }: Props) {
               Gökyüzü bonusu +{Math.round(result.skyBonus * 100)}%
             </p>
           )}
-          {won && (
-            <p className="mt-4 text-sm text-ice">
-              Bir sonraki katman {fmtX(result.nearMissMultiplier)} idi — iyi
-              indirdin.
+        </div>
+
+        <div className="border-t border-white/10 px-4 py-3 text-left">
+          <p className="text-[10px] uppercase tracking-wider text-fog">
+            USDC makbuz
+          </p>
+          <p className="mt-1 text-sm text-white">{receiptLine(result)}</p>
+          {result.stakeAsset && (
+            <p className="mt-0.5 text-xs text-fog">
+              Stake {formatStakeUsdc(result.stakeAmount, result.stakeAsset)}
+              {result.ledgerId ? ` · ${result.ledgerId.slice(0, 12)}…` : ''}
             </p>
+          )}
+
+          {result.fairCommit && (
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] uppercase tracking-wider text-fog">
+                  Provably fair
+                </p>
+                {fairBadge != null && (
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      fairBadge ? 'text-signal' : 'text-danger'
+                    }`}
+                  >
+                    {fairBadge ? 'DOĞRULANDI' : 'UYUŞMAZ'}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 font-mono text-[11px] text-ice">
+                commit {shortCommit(result.fairCommit)}
+              </p>
+              {result.fairSeed && (
+                <p className="mt-0.5 truncate font-mono text-[10px] text-fog">
+                  seed {result.fairSeed}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copy('commit', result.fairCommit || '')}
+                  className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-fog"
+                >
+                  Commit kopyala
+                </button>
+                {result.fairSeed && (
+                  <button
+                    type="button"
+                    onClick={() => void copy('seed', result.fairSeed || '')}
+                    className="rounded-lg border border-white/15 px-2 py-1 text-[11px] text-fog"
+                  >
+                    Seed kopyala
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => game.setScreen('wallet')}
+                  className="rounded-lg border border-signal/30 px-2 py-1 text-[11px] text-signal"
+                >
+                  Ledger’a git
+                </button>
+              </div>
+              {copied && (
+                <p className="mt-1 text-[10px] text-signal">Kopyalandı: {copied}</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -137,8 +271,11 @@ export function ResultScreen({ game }: Props) {
           <button
             type="button"
             onClick={() => {
-              if (game.profile.flightCredits > 0) game.startFlight()
-              else game.goHome()
+              if (game.profile.flightCredits > 0 || game.profile.payWithCrypto) {
+                game.startFlight()
+              } else {
+                game.goHome()
+              }
             }}
             className="rounded-xl py-3.5 text-sm font-semibold text-ink"
             style={{

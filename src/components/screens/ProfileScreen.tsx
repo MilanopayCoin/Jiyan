@@ -169,6 +169,9 @@ export function ProfileScreen({ game }: Props) {
             <span className={h.outcome === 'cashed' ? 'text-signal' : 'text-danger'}>
               {CRAFTS[h.craftId ?? 'drone'].name} ·{' '}
               {h.outcome === 'cashed' ? 'İniş' : 'Düşüş'} · K{h.layer}
+              {h.usdcPayout != null
+                ? ` · ${h.usdcPayout >= 0 ? '+' : ''}$${Math.abs(h.usdcPayout).toFixed(2)}`
+                : ''}
             </span>
             <span className="font-display text-xl text-white">
               {h.outcome === 'cashed' ? fmtX(h.multiplier) : '0x'}
