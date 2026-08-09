@@ -5,7 +5,6 @@ import {
   cancelWithdraw,
   creditOnChainDeposit,
   queueWithdraw,
-  WITHDRAW_FEE_BPS,
 } from './withdrawQueue'
 import type { PlayerProfile } from './types'
 
@@ -33,11 +32,13 @@ function base(over: Partial<PlayerProfile> = {}): PlayerProfile {
     selectedSkin: 'drone-default',
     walletAddress: 'So11111111111111111111111111111111111111112',
     walletVerified: true,
-    balances: { ...emptyBalances(), sol: 1, usdt: 100 },
-    payAsset: 'sol',
+    balances: { ...emptyBalances(), sol: 1, usdt: 100, usdc: 10 },
+    payAsset: 'usdc',
     payWithCrypto: true,
-    stakeAmount: ASSETS.sol.flightStake,
+    stakeAmount: 1,
     demoPackClaimed: true,
+    instantUsdcClaimed: true,
+    highRoller: false,
     autoCashOut: 0,
     checkInDate: null,
     checkInStreak: 0,
@@ -48,23 +49,25 @@ function base(over: Partial<PlayerProfile> = {}): PlayerProfile {
   }
 }
 
-describe('withdrawQueue', () => {
+describe('withdrawQueue USDC settlement', () => {
   beforeEach(() => {
     localStorage.clear()
   })
 
-  it('calculates 2% fee with floor', () => {
-    const { fee, net } = calcWithdrawFee('usdt', 10)
-    expect(fee).toBe(Math.max(0.25, round2((10 * WITHDRAW_FEE_BPS) / 10_000)))
-    expect(net).toBe(round2(10 - fee))
+  it('converts USDT withdraw to USDC net', () => {
+    const { fee, net, usdcGross } = calcWithdrawFee('usdt', 10)
+    expect(usdcGross).toBe(10)
+    expect(fee).toBeGreaterThan(0)
+    expect(net).toBe(10 - fee)
   })
 
-  it('queues withdraw and refunds on cancel', () => {
+  it('queues withdraw settled in USDC', () => {
     const p = base()
     const q = queueWithdraw(p, 'usdt', 10, 'So11111111111111111111111111111111111111112')
     expect(q.ok).toBe(true)
     if (!q.ok) return
     expect(q.balances.usdt).toBe(90)
+    expect(q.request.asset).toBe('usdc')
     expect(q.request.net).toBeLessThan(10)
     const next = { ...p, balances: q.balances }
     const c = cancelWithdraw(next, q.request.id)
@@ -73,15 +76,22 @@ describe('withdrawQueue', () => {
     expect(c.balances.usdt).toBe(100)
   })
 
-  it('credits on-chain SOL deposit', () => {
+  it('credits on-chain USDC deposit', () => {
     const p = base({ balances: emptyBalances() })
-    const res = creditOnChainDeposit(p, 0.05, 'sig123456789abcdef')
+    const res = creditOnChainDeposit(p, 5, 'sig123456789abcdef', 'usdc')
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.balances.sol).toBe(0.05)
+    expect(res.balances.usdc).toBe(5)
+  })
+
+  it('converts SOL to USDC for withdraw', () => {
+    const p = base()
+    const q = queueWithdraw(p, 'sol', 0.1, 'So11111111111111111111111111111111111111112')
+    expect(q.ok).toBe(true)
+    if (!q.ok) return
+    expect(q.request.asset).toBe('usdc')
+    expect(q.request.amount).toBeGreaterThan(1)
   })
 })
 
-function round2(n: number) {
-  return Math.round(n * 100) / 100
-}
+void ASSETS

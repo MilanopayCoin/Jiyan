@@ -37,19 +37,23 @@ Canlı: https://chaindrone.netlify.app
 - Phantom cüzdan bağlantısı (Profil → bağla / mesaj imzala)
 - WalletConnect (QR / mobil) — `VITE_WALLETCONNECT_PROJECT_ID`
 - Multi-asset play wallet (USDT/USDC/SOL/ETH/BTC) · demo yükle/çek
-- On-chain SOL deposit (Phantom → treasury) — `VITE_SOLANA_TREASURY`
-- Çekim kuyruğu (%2 ücret, iptal = iade)
+- **Stable masalar** $1 / $5 / $10 (USDT/USDC) · High roller = SOL/ETH/BTC
+- İlk açılışta **+10 USDC** instant credit
+- On-chain **USDC** (SPL) + SOL deposit (Phantom → treasury)
+- **Gasless USDC** via `/api/sponsor` + `SPONSOR_PRIVATE_KEY`
+- Çekim her zaman **USDC net** (diğer varlıklar FX ile çevrilir)
 - Auto cash-out · günlük check-in · davet ödülleri
 
-### Phantom
+### Phantom / Solana
 
-Extension (`injected`) App ID olmadan çalışır. Google/Apple için Portal’dan App ID alıp Netlify / `.env`’e `VITE_PHANTOM_APP_ID` ekleyin; redirect URL’i allowlist’e alın (`https://chaindrone.netlify.app/`).
-
-On-chain SOL yükleme için Netlify env:
+Extension (`injected`) App ID olmadan çalışır. Google/Apple için `VITE_PHANTOM_APP_ID`.
 
 ```
 VITE_SOLANA_CLUSTER=devnet
-VITE_SOLANA_TREASURY=<treasury-public-key>
+VITE_SOLANA_TREASURY=<treasury-pubkey>
+VITE_SOLANA_SPONSOR_PUBKEY=<fee-payer-pubkey>   # optional gasless
+# Netlify server env (not VITE_*):
+SPONSOR_PRIVATE_KEY=<base58-secret>
 ```
 
 Docs: https://docs.phantom.com/sdks/react-sdk/sign-and-send-transaction

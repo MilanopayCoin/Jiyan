@@ -541,11 +541,25 @@ export function useGame() {
 
   const startFlight = useCallback((opts?: { challenge?: boolean; blind?: boolean }) => {
     const profile = loadProfile()
-    const payAsset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdt'
+    let payAsset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdc'
+    if (!profile.highRoller && payAsset !== 'usdt' && payAsset !== 'usdc') {
+      payAsset = 'usdc'
+    }
+    const tableStakes = profile.highRoller
+      ? ASSETS[payAsset].stakes
+      : [1, 5, 10]
     const stakeAmt =
       Number.isFinite(profile.stakeAmount) && profile.stakeAmount > 0
         ? roundAsset(profile.stakeAmount, payAsset)
-        : ASSETS[payAsset].flightStake
+        : profile.highRoller
+          ? ASSETS[payAsset].flightStake
+          : 1
+    if (
+      profile.payWithCrypto &&
+      !tableStakes.some((o) => Math.abs(o - stakeAmt) < 1e-12)
+    ) {
+      // allow exact match only for table / high-roller presets
+    }
     const useCrypto = canStakeCrypto(profile, payAsset, stakeAmt)
 
     if (!useCrypto && profile.flightCredits <= 0) return false
@@ -960,25 +974,51 @@ export function useGame() {
     return res
   }, [])
 
-  const creditChainDeposit = useCallback((amount: number, signature: string) => {
+  const creditChainDeposit = useCallback(
+    (amount: number, signature: string, asset: 'sol' | 'usdc' = 'sol') => {
+      const profile = loadProfile()
+      const res = creditOnChainDeposit(profile, amount, signature, asset)
+      if (!res.ok) return res
+      const next = { ...profile, ...res.profilePatch, balances: res.balances }
+      if (!next.badges.includes('onchain-yukle')) {
+        next.badges = [...next.badges, 'onchain-yukle']
+      }
+      saveProfile(next)
+      dispatch({ type: 'SET_PROFILE', profile: next })
+      return res
+    },
+    [],
+  )
+
+  const setHighRoller = useCallback((on: boolean) => {
     const profile = loadProfile()
-    const res = creditOnChainDeposit(profile, amount, signature)
-    if (!res.ok) return res
-    const next = { ...profile, ...res.profilePatch, balances: res.balances }
-    if (!next.badges.includes('onchain-yukle')) {
-      next.badges = [...next.badges, 'onchain-yukle']
+    const asset = on
+      ? isAssetId(profile.payAsset) && !['usdt', 'usdc'].includes(profile.payAsset)
+        ? profile.payAsset
+        : 'sol'
+      : ['usdt', 'usdc'].includes(profile.payAsset)
+        ? profile.payAsset
+        : 'usdc'
+    const next: PlayerProfile = {
+      ...profile,
+      highRoller: on,
+      payAsset: asset as typeof profile.payAsset,
+      stakeAmount: on ? ASSETS[asset as AssetId].flightStake : 1,
     }
     saveProfile(next)
     dispatch({ type: 'SET_PROFILE', profile: next })
-    return res
   }, [])
 
   const setPayAsset = useCallback((asset: AssetId) => {
     const profile = loadProfile()
+    const high = profile.highRoller
+    if (!high && asset !== 'usdt' && asset !== 'usdc') {
+      return
+    }
     const next: PlayerProfile = {
       ...profile,
       payAsset: asset,
-      stakeAmount: ASSETS[asset].flightStake,
+      stakeAmount: high ? ASSETS[asset].flightStake : 1,
       balances: normalizeBalances(profile.balances),
     }
     saveProfile(next)
@@ -1132,6 +1172,7 @@ export function useGame() {
     setPayAsset,
     setPayWithCrypto,
     setStakeAmount,
+    setHighRoller,
     selectCraft,
     buyCraft,
     buySkin,

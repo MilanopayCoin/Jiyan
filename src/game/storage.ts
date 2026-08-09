@@ -9,13 +9,18 @@ import type {
 import { todayKey, yesterdayKey } from './math'
 import { CRAFTS, SKINS, scorePoints } from './vehicles'
 import {
-  ASSETS,
+  INSTANT_USDC_CREDIT,
   emptyBalances,
   isAssetId,
   normalizeBalances,
   roundAsset,
   type AssetId,
 } from './assets'
+import {
+  clampPlayAsset,
+  defaultStakeFor,
+  isStableAsset,
+} from './stableEconomy'
 
 const STORAGE_KEY = 'zincir-drone-profile-v2'
 const LEGACY_KEY = 'zincir-drone-profile-v1'
@@ -59,10 +64,12 @@ export function defaultProfile(): PlayerProfile {
     walletAddress: null,
     walletVerified: false,
     balances: emptyBalances(),
-    payAsset: 'usdt',
+    payAsset: 'usdc',
     payWithCrypto: true,
-    stakeAmount: ASSETS.usdt.flightStake,
+    stakeAmount: 1,
     demoPackClaimed: false,
+    instantUsdcClaimed: false,
+    highRoller: false,
     autoCashOut: 0,
     checkInDate: null,
     checkInStreak: 0,
@@ -119,13 +126,23 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
       typeof raw.walletAddress === 'string' ? raw.walletAddress : null,
     walletVerified: Boolean(raw.walletVerified),
     balances: normalizeBalances(raw.balances),
-    payAsset: isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdt',
     payWithCrypto: raw.payWithCrypto !== false,
+    highRoller: Boolean(raw.highRoller),
+    instantUsdcClaimed: Boolean(raw.instantUsdcClaimed),
+    payAsset: (() => {
+      const high = Boolean(raw.highRoller)
+      const rawAsset = isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdc'
+      return clampPlayAsset(rawAsset, high)
+    })(),
     stakeAmount: (() => {
-      const asset = isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdt'
+      const high = Boolean(raw.highRoller)
+      const asset = clampPlayAsset(
+        isAssetId(raw.payAsset) ? (raw.payAsset as AssetId) : 'usdc',
+        high,
+      )
       const n = Number(raw.stakeAmount)
       if (Number.isFinite(n) && n > 0) return roundAsset(n, asset)
-      return ASSETS[asset].flightStake
+      return defaultStakeFor(asset, high)
     })(),
     demoPackClaimed: Boolean(raw.demoPackClaimed),
     autoCashOut: (() => {
@@ -148,17 +165,39 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
   }
 }
 
+/** Grant 10 USDC once on first load if never claimed */
+export function ensureInstantUsdc(profile: PlayerProfile): PlayerProfile {
+  if (profile.instantUsdcClaimed) return profile
+  const balances = normalizeBalances(profile.balances)
+  balances.usdc = roundAsset(balances.usdc + INSTANT_USDC_CREDIT, 'usdc')
+  const next: PlayerProfile = {
+    ...profile,
+    balances,
+    instantUsdcClaimed: true,
+    payAsset: isStableAsset(profile.payAsset) ? profile.payAsset : 'usdc',
+    badges: profile.badges.includes('usdc-hosgeldin')
+      ? profile.badges
+      : [...profile.badges, 'usdc-hosgeldin'],
+  }
+  saveProfile(next)
+  return next
+}
+
 export function loadProfile(): PlayerProfile {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY)
-    if (!raw) return defaultProfile()
+    if (!raw) {
+      const fresh = defaultProfile()
+      return ensureInstantUsdc(fresh)
+    }
     const parsed = JSON.parse(raw) as Partial<PlayerProfile>
     const migrated = migrateProfile(parsed)
-    const reconciled = reconcileStreakAndMissions(migrated)
+    const withUsdc = ensureInstantUsdc(migrated)
+    const reconciled = reconcileStreakAndMissions(withUsdc)
     saveProfile(reconciled)
     return reconciled
   } catch {
-    return defaultProfile()
+    return ensureInstantUsdc(defaultProfile())
   }
 }
 
@@ -538,4 +577,5 @@ export const BADGE_LABELS: Record<string, string> = {
   'sosyal-pilot': 'Sosyal Pilot',
   'filo-davet': 'Davet Filosu',
   'onchain-yukle': 'On-chain Yükleme',
+  'usdc-hosgeldin': 'USDC Hoşgeldin',
 }

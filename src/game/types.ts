@@ -109,6 +109,10 @@ export interface PlayerProfile {
   /** Selected stake amount in payAsset units */
   stakeAmount: number
   demoPackClaimed: boolean
+  /** Instant 10 USDC welcome credited */
+  instantUsdcClaimed: boolean
+  /** Allow SOL/ETH/BTC stakes (off = stable USDT/USDC only) */
+  highRoller: boolean
   /** Auto cash-out target multiplier; 0 = off */
   autoCashOut: number
   /** Last daily check-in date YYYY-MM-DD */

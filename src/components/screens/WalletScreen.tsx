@@ -9,13 +9,15 @@ import {
   type AssetId,
 } from '../../game/assets'
 import { loadLedger } from '../../game/walletOps'
+import { OnChainSolDeposit } from '../OnChainSolDeposit'
+import { OnChainUsdcDeposit } from '../OnChainUsdcDeposit'
 import {
   calcWithdrawFee,
   loadWithdrawQueue,
   WITHDRAW_FEE_BPS,
 } from '../../game/withdrawQueue'
+import { formatUsd, STABLE_ASSETS, totalUsdBalance } from '../../game/stableEconomy'
 import { WalletPanel } from '../WalletPanel'
-import { OnChainSolDeposit } from '../OnChainSolDeposit'
 
 interface Props {
   game: GameApi
@@ -70,7 +72,7 @@ export function WalletScreen({ game }: Props) {
     refresh()
     if (res.ok && 'request' in res) {
       flash(
-        `Kuyruğa alındı · net ${formatAsset(res.request.net, asset)} (ücret ${formatAsset(res.request.fee, asset)})`,
+        `Kuyruğa alındı · net ${formatUsd(res.request.net)} USDC (ücret ${formatUsd(res.request.fee)})`,
       )
     }
   }
@@ -89,8 +91,15 @@ export function WalletScreen({ game }: Props) {
     <div className="relative z-20 flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
       <h1 className="font-display text-4xl text-white">Cüzdan</h1>
       <p className="mt-1 text-sm text-fog">
-        USDT · USDC · SOL · ETH · BTC — yükle, oyna, çek
+        Stable masalar $1 / $5 / $10 · çekimler USDC
       </p>
+
+      {profile.instantUsdcClaimed && (
+        <p className="mt-2 text-center text-xs text-signal">
+          Bankroll {formatUsd(totalUsdBalance(profile.balances))} · ilk giriş +10
+          USDC
+        </p>
+      )}
 
       {!profile.demoPackClaimed && (
         <motion.button
@@ -116,7 +125,9 @@ export function WalletScreen({ game }: Props) {
               type="button"
               onClick={() => {
                 setAsset(id)
-                game.setPayAsset(id)
+                if (profile.highRoller || STABLE_ASSETS.includes(id as 'usdt' | 'usdc')) {
+                  game.setPayAsset(id)
+                }
               }}
               className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left backdrop-blur-md ${
                 active
@@ -163,23 +174,48 @@ export function WalletScreen({ game }: Props) {
         />
       </label>
 
+      <label className="mt-2 flex items-center justify-between rounded-2xl border border-white/10 bg-panel px-4 py-3">
+        <div>
+          <p className="text-sm text-white">High roller</p>
+          <p className="text-xs text-fog">
+            Kapalı: sadece USDT/USDC · $1/$5/$10
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          checked={profile.highRoller}
+          onChange={(e) => game.setHighRoller(e.target.checked)}
+          className="h-5 w-5 accent-[#ffb84d]"
+        />
+      </label>
+
       <div className="mt-4">
         <p className="text-xs uppercase tracking-wider text-fog">
-          Bahis ({ASSETS[profile.payAsset].symbol})
+          Bahis ({profile.highRoller ? ASSETS[profile.payAsset].symbol : 'USD'})
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {ASSETS[profile.payAsset].stakes.map((s) => (
+          {(profile.highRoller
+            ? ASSETS[profile.payAsset].stakes
+            : [1, 5, 10]
+          ).map((s) => (
             <button
               key={s}
               type="button"
-              onClick={() => game.setStakeAmount(s)}
+              onClick={() => {
+                if (!profile.highRoller && !STABLE_ASSETS.includes(profile.payAsset as 'usdt' | 'usdc')) {
+                  game.setPayAsset('usdc')
+                }
+                game.setStakeAmount(s)
+              }}
               className={`rounded-xl px-3 py-2 text-sm ${
                 Math.abs(profile.stakeAmount - s) < 1e-12
                   ? 'bg-signal/25 text-signal'
                   : 'border border-white/15 text-white'
               }`}
             >
-              {formatAsset(s, profile.payAsset)}
+              {profile.highRoller
+                ? formatAsset(s, profile.payAsset)
+                : formatUsd(s)}
             </button>
           ))}
         </div>
@@ -209,17 +245,30 @@ export function WalletScreen({ game }: Props) {
       </div>
 
       {tab === 'deposit' && (
-        <OnChainSolDeposit
-          onCredited={(solAmt, signature) => {
-            const res = game.creditChainDeposit(solAmt, signature)
-            if (!res.ok) {
-              flash(res.error)
-              return
-            }
-            refresh()
-            flash(`Bakiyeye eklendi: ${formatAsset(solAmt, 'sol')}`)
-          }}
-        />
+        <>
+          <OnChainUsdcDeposit
+            onCredited={(usdcAmt, signature) => {
+              const res = game.creditChainDeposit(usdcAmt, signature, 'usdc')
+              if (!res.ok) {
+                flash(res.error)
+                return
+              }
+              refresh()
+              flash(`Bakiyeye eklendi: ${formatUsd(usdcAmt)} USDC`)
+            }}
+          />
+          <OnChainSolDeposit
+            onCredited={(solAmt, signature) => {
+              const res = game.creditChainDeposit(solAmt, signature, 'sol')
+              if (!res.ok) {
+                flash(res.error)
+                return
+              }
+              refresh()
+              flash(`Bakiyeye eklendi: ${formatAsset(solAmt, 'sol')}`)
+            }}
+          />
+        </>
       )}
 
       {(tab === 'deposit' || tab === 'withdraw') && (
@@ -266,9 +315,12 @@ export function WalletScreen({ game }: Props) {
               />
               {feePreview && (
                 <div className="mt-2 rounded-xl border border-amber/25 bg-amber/10 px-3 py-2 text-xs text-amber">
-                  Ücret %{WITHDRAW_FEE_BPS / 100}:{' '}
-                  {formatAsset(feePreview.fee, asset)} → net{' '}
-                  {formatAsset(feePreview.net, asset)}
+                  USDC’ye çevrilir · ücret %{WITHDRAW_FEE_BPS / 100}:{' '}
+                  {formatUsd(feePreview.fee)} → net {formatUsd(feePreview.net)}{' '}
+                  USDC
+                  {'usdcGross' in feePreview && (
+                    <> · brüt {formatUsd(feePreview.usdcGross)}</>
+                  )}
                 </div>
               )}
             </>
@@ -301,12 +353,12 @@ export function WalletScreen({ game }: Props) {
                   : 'linear-gradient(135deg, #b45309, #ffb84d)',
             }}
           >
-            {tab === 'deposit' ? 'Demo yükle' : 'Kuyruğa al'}
+            {tab === 'deposit' ? 'Demo yükle' : 'USDC olarak çek'}
           </button>
           <p className="mt-2 text-[11px] leading-relaxed text-fog">
             {tab === 'deposit'
-              ? 'Demo anında eklenir. Gerçek SOL için yukarıdaki Phantom yüklemeyi kullan.'
-              : 'Bakiye düşer, talep bekleyen kuyruğa girer. Ücret şeffaf; iptal iade eder.'}
+              ? 'Demo anında eklenir. Gerçek USDC için Phantom yüklemeyi kullan.'
+              : 'Kaynak varlık düşer, ödeme her zaman USDC net tutarıdır. İptal iade eder.'}
           </p>
         </div>
       )}
@@ -327,10 +379,10 @@ export function WalletScreen({ game }: Props) {
                 >
                   <div>
                     <p className="text-sm text-white">
-                      {formatAsset(q.net, q.asset)} net
+                      {formatUsd(q.net)} USDC net
                     </p>
                     <p className="text-[11px] text-fog">
-                      Ücret {formatAsset(q.fee, q.asset)} ·{' '}
+                      Ücret {formatUsd(q.fee)} ·{' '}
                       {q.toAddress.slice(0, 6)}…{q.toAddress.slice(-4)}
                     </p>
                   </div>

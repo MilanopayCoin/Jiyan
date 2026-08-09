@@ -32,7 +32,7 @@ export const ASSETS: Record<AssetId, AssetDef> = {
     chainLabel: 'Ethereum',
     decimals: 2,
     flightStake: 1,
-    stakes: [0.5, 1, 2, 5, 10],
+    stakes: [1, 5, 10],
     minDeposit: 1,
     maxDeposit: 10_000,
     minWithdraw: 1,
@@ -46,7 +46,7 @@ export const ASSETS: Record<AssetId, AssetDef> = {
     chainLabel: 'Solana',
     decimals: 2,
     flightStake: 1,
-    stakes: [0.5, 1, 2, 5, 10],
+    stakes: [1, 5, 10],
     minDeposit: 1,
     maxDeposit: 10_000,
     minWithdraw: 1,
@@ -167,6 +167,10 @@ export const DEMO_PACK: AssetBalances = {
   eth: 0.02,
   btc: 0.001,
 }
+
+/** Instant USDC on first open (separate from full demo pack) */
+export const INSTANT_USDC_CREDIT = 10
+
 
 export const LEDGER_LABELS: Record<LedgerKind, string> = {
   deposit: 'Yükleme',

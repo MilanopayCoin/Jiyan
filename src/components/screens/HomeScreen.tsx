@@ -6,7 +6,15 @@ import { InstallBanner } from '../InstallBanner'
 import { fmtX } from '../../game/math'
 import { ASSETS, formatAsset, normalizeBalances } from '../../game/assets'
 import { canStakeCrypto } from '../../game/walletOps'
-import { AUTO_CASH_PRESETS, approxUsd, formatAutoCash } from '../../game/retention'
+import {
+  AUTO_CASH_PRESETS,
+  formatAutoCash,
+} from '../../game/retention'
+import {
+  formatUsd,
+  stakePresets,
+  totalUsdBalance,
+} from '../../game/stableEconomy'
 
 interface Props {
   game: GameApi
@@ -25,14 +33,16 @@ const ICONS: Record<CraftId, string> = {
 export function HomeScreen({ game }: Props) {
   const mission = game.profile.missions.find((m) => !m.completed) ?? game.profile.missions[0]
   const payAsset = game.profile.payAsset
-  const stakeAmt = game.profile.stakeAmount || ASSETS[payAsset].flightStake
+  const stakeAmt = game.profile.stakeAmount || (game.profile.highRoller ? ASSETS[payAsset].flightStake : 1)
   const cryptoOk = canStakeCrypto(game.profile, payAsset, stakeAmt)
   const noCredits = !cryptoOk && game.profile.flightCredits <= 0
   const craft = CRAFTS[game.profile.selectedCraft]
   const skin = SKINS[game.profile.selectedSkin]
   const points = scorePoints(game.profile.totalCashed)
   const bal = normalizeBalances(game.profile.balances)[payAsset]
+  const usdTotal = totalUsdBalance(normalizeBalances(game.profile.balances))
   const checkPreview = game.checkInPreview
+  const presets = stakePresets(payAsset, game.profile.highRoller)
 
   return (
     <div className="relative z-20 flex h-full flex-col">
@@ -64,6 +74,14 @@ export function HomeScreen({ game }: Props) {
               {game.profile.flightCredits}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => game.setScreen('wallet')}
+            className="rounded-full border border-white/15 bg-black/35 px-4 py-1.5 backdrop-blur-sm"
+          >
+            <span className="text-xs text-fog">Bankroll </span>
+            <span className="font-display text-xl text-ice">{formatUsd(usdTotal)}</span>
+          </button>
           <button
             type="button"
             onClick={() => game.setScreen('wallet')}
@@ -199,6 +217,50 @@ export function HomeScreen({ game }: Props) {
 
         <p className="mb-2 text-center text-xs text-fog">{craft.riskLabel}</p>
 
+        <div className="mb-3 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => game.setHighRoller(false)}
+            className={`rounded-full px-3 py-1 text-xs ${
+              !game.profile.highRoller
+                ? 'bg-signal/25 text-signal'
+                : 'border border-white/15 text-fog'
+            }`}
+          >
+            Stable $
+          </button>
+          <button
+            type="button"
+            onClick={() => game.setHighRoller(true)}
+            className={`rounded-full px-3 py-1 text-xs ${
+              game.profile.highRoller
+                ? 'bg-amber/25 text-amber'
+                : 'border border-white/15 text-fog'
+            }`}
+          >
+            High roller
+          </button>
+        </div>
+
+        {!game.profile.highRoller && (
+          <div className="mb-2 flex justify-center gap-2">
+            {(['usdc', 'usdt'] as const).map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => game.setPayAsset(id)}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  payAsset === id
+                    ? 'bg-ice/25 text-ice'
+                    : 'border border-white/15 text-fog'
+                }`}
+              >
+                {id.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="mb-3">
           <p className="mb-1.5 text-center text-[10px] uppercase tracking-wider text-fog">
             Auto cash-out · {formatAutoCash(game.profile.autoCashOut)}
@@ -222,22 +284,31 @@ export function HomeScreen({ game }: Props) {
         </div>
 
         {game.profile.payWithCrypto && (
-          <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
-            {ASSETS[payAsset].stakes.slice(0, 4).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => game.setStakeAmount(s)}
-                className={`rounded-full px-3 py-1 text-xs ${
-                  Math.abs(stakeAmt - s) < 1e-12
-                    ? 'bg-signal/25 text-signal'
-                    : 'border border-white/15 text-fog'
-                }`}
-              >
-                {formatAsset(s, payAsset)}
-                <span className="ml-1 opacity-60">{approxUsd(s, payAsset)}</span>
-              </button>
-            ))}
+          <div className="mb-3">
+            <p className="mb-1.5 text-center text-[10px] uppercase tracking-wider text-fog">
+              {game.profile.highRoller ? 'Bahis' : 'Masa'} ·{' '}
+              {game.profile.highRoller
+                ? formatAsset(stakeAmt, payAsset)
+                : formatUsd(stakeAmt)}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {presets.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => game.setStakeAmount(s)}
+                  className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+                    Math.abs(stakeAmt - s) < 1e-12
+                      ? 'bg-signal/25 text-signal'
+                      : 'border border-white/15 text-fog'
+                  }`}
+                >
+                  {game.profile.highRoller
+                    ? formatAsset(s, payAsset)
+                    : formatUsd(s)}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -301,7 +372,11 @@ export function HomeScreen({ game }: Props) {
             {noCredits
               ? 'Bakiye / pil yok — Cüzdan’dan yükle'
               : cryptoOk
-                ? `${craft.name} · ${formatAsset(stakeAmt, payAsset)} bahis`
+                ? `${craft.name} · ${
+                    game.profile.highRoller
+                      ? formatAsset(stakeAmt, payAsset)
+                      : formatUsd(stakeAmt)
+                  } bahis`
                 : `${craft.name} · 1 pil · telefonu eğerek uçur`}
           </span>
         </motion.button>

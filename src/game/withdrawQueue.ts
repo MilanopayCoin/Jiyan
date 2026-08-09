@@ -1,36 +1,36 @@
 import {
   type AssetId,
   formatAsset,
-  getAsset,
   normalizeBalances,
   roundAsset,
-} from '../game/assets'
-import type { PlayerProfile } from '../game/types'
-import type { WalletResult } from '../game/walletOps'
-import { depositAsset } from '../game/walletOps'
+  LEDGER_KEY,
+  MAX_LEDGER,
+  type LedgerEntry,
+} from './assets'
+import type { PlayerProfile } from './types'
+import { toUsdcAmount } from './stableEconomy'
 
 const WITHDRAW_QUEUE_KEY = 'zincir-drone-withdraw-queue-v1'
 const MAX_QUEUE = 40
 
-/** Flat % fee + per-asset minimum fee (play balance units) */
+/** Withdraw fee in USDC terms */
 export const WITHDRAW_FEE_BPS = 200 // 2%
-export const WITHDRAW_MIN_FEE: Record<AssetId, number> = {
-  usdt: 0.25,
-  usdc: 0.25,
-  sol: 0.002,
-  eth: 0.00008,
-  btc: 0.000005,
-}
+export const WITHDRAW_MIN_FEE_USDC = 0.25
 
 export type WithdrawStatus = 'pending' | 'sent' | 'cancelled'
 
 export interface WithdrawRequest {
   id: string
-  asset: AssetId
-  /** Gross amount deducted from play balance */
+  /** Source play asset that was burned/converted */
+  sourceAsset: AssetId
+  /** Gross source amount deducted */
+  sourceAmount: number
+  /** Always settle as USDC */
+  asset: 'usdc'
+  /** Gross USDC equivalent before fee */
   amount: number
   fee: number
-  /** Net amount to receive on-chain */
+  /** Net USDC to receive on-chain */
   net: number
   toAddress: string
   status: WithdrawStatus
@@ -38,14 +38,22 @@ export interface WithdrawRequest {
   note?: string
 }
 
+export function calcUsdcWithdrawFee(grossUsdc: number): { fee: number; net: number } {
+  const pct = roundAsset((grossUsdc * WITHDRAW_FEE_BPS) / 10_000, 'usdc')
+  const fee = roundAsset(Math.max(pct, WITHDRAW_MIN_FEE_USDC), 'usdc')
+  const net = roundAsset(Math.max(0, grossUsdc - fee), 'usdc')
+  return { fee, net }
+}
+
+/** @deprecated use calcUsdcWithdrawFee — kept for UI preview helpers */
 export function calcWithdrawFee(asset: AssetId, amount: number): {
   fee: number
   net: number
+  usdcGross: number
 } {
-  const pct = roundAsset((amount * WITHDRAW_FEE_BPS) / 10_000, asset)
-  const fee = roundAsset(Math.max(pct, WITHDRAW_MIN_FEE[asset]), asset)
-  const net = roundAsset(Math.max(0, amount - fee), asset)
-  return { fee, net }
+  const usdcGross = toUsdcAmount(amount, asset)
+  const { fee, net } = calcUsdcWithdrawFee(usdcGross)
+  return { fee, net, usdcGross }
 }
 
 export function loadWithdrawQueue(): WithdrawRequest[] {
@@ -73,6 +81,35 @@ function saveQueue(list: WithdrawRequest[]) {
   )
 }
 
+function pushLedgerNote(
+  kind: LedgerEntry['kind'],
+  asset: AssetId,
+  amount: number,
+  note: string,
+  address?: string,
+) {
+  try {
+    const raw = localStorage.getItem(LEDGER_KEY)
+    const prev = raw ? (JSON.parse(raw) as LedgerEntry[]) : []
+    const list = Array.isArray(prev) ? prev : []
+    const entry: LedgerEntry = {
+      id: `led-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      kind,
+      asset,
+      amount,
+      note,
+      address,
+      at: Date.now(),
+    }
+    localStorage.setItem(
+      LEDGER_KEY,
+      JSON.stringify([entry, ...list].slice(0, MAX_LEDGER)),
+    )
+  } catch {
+    // ignore
+  }
+}
+
 export type QueueWithdrawResult =
   | {
       ok: true
@@ -82,43 +119,49 @@ export type QueueWithdrawResult =
     }
   | { ok: false; error: string }
 
-/** Deduct balance + enqueue pending withdraw with transparent fee */
+/**
+ * Deduct source asset, convert to USDC settlement, enqueue pending withdraw.
+ * Net payout is always USDC.
+ */
 export function queueWithdraw(
   profile: PlayerProfile,
   asset: AssetId,
   amount: number,
   toAddress: string,
 ): QueueWithdrawResult {
-  const meta = getAsset(asset)
   const amt = roundAsset(amount, asset)
   const addr = toAddress.trim()
   if (!(amt > 0)) return { ok: false, error: 'Geçersiz tutar' }
-  if (amt < meta.minWithdraw) {
-    return { ok: false, error: `Min. çekim ${formatAsset(meta.minWithdraw, asset)}` }
-  }
   if (addr.length < 8) return { ok: false, error: 'Geçerli cüzdan adresi gir' }
 
-  const { fee, net } = calcWithdrawFee(asset, amt)
+  const usdcGross = toUsdcAmount(amt, asset)
+  if (usdcGross < 1) {
+    return { ok: false, error: 'Min. çekim ≈ $1 USDC karşılığı' }
+  }
+  const { fee, net } = calcUsdcWithdrawFee(usdcGross)
   if (net <= 0) return { ok: false, error: 'Ücret sonrası net tutar 0' }
 
   const balances = normalizeBalances(profile.balances)
   if (balances[asset] < amt - 1e-12) {
-    return { ok: false, error: `Yetersiz ${meta.symbol}` }
+    return { ok: false, error: `Yetersiz ${asset.toUpperCase()}` }
   }
   balances[asset] = roundAsset(balances[asset] - amt, asset)
 
   const request: WithdrawRequest = {
     id: `wd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    asset,
-    amount: amt,
+    sourceAsset: asset,
+    sourceAmount: amt,
+    asset: 'usdc',
+    amount: usdcGross,
     fee,
     net,
     toAddress: addr,
     status: 'pending',
     createdAt: Date.now(),
-    note: `Çekim kuyruğu −${formatAsset(amt, asset)} (ücret ${formatAsset(fee, asset)}, net ${formatAsset(net, asset)})`,
+    note: `Çekim → USDC: −${formatAsset(amt, asset)} ≈ $${usdcGross.toFixed(2)} (ücret $${fee.toFixed(2)}, net $${net.toFixed(2)})`,
   }
   saveQueue([request, ...loadWithdrawQueue()].slice(0, MAX_QUEUE))
+  pushLedgerNote('withdraw', asset, -amt, request.note!, addr)
 
   return {
     ok: true,
@@ -140,10 +183,18 @@ export function cancelWithdraw(
     return { ok: false, error: 'Sadece bekleyen çekim iptal edilebilir' }
   }
 
+  const source = req.sourceAsset ?? req.asset
+  const refund = req.sourceAmount ?? req.amount
   const balances = normalizeBalances(profile.balances)
-  balances[req.asset] = roundAsset(balances[req.asset] + req.amount, req.asset)
+  balances[source] = roundAsset(balances[source] + refund, source)
   list[idx] = { ...req, status: 'cancelled' }
   saveQueue(list)
+  pushLedgerNote(
+    'deposit',
+    source,
+    refund,
+    `Çekim iptal iadesi +${formatAsset(refund, source)}`,
+  )
 
   return {
     ok: true,
@@ -153,29 +204,32 @@ export function cancelWithdraw(
   }
 }
 
-/** Credit play balance after confirmed on-chain SOL deposit */
 export function creditOnChainDeposit(
   profile: PlayerProfile,
   amount: number,
   signature: string,
-): WalletResult {
-  const res = depositAsset(profile, 'sol', amount, profile.walletAddress ?? undefined)
-  if (!res.ok) return res
-  // Annotate ledger note via a second deposit-shaped entry is awkward;
-  // depositAsset already wrote ledger — rewrite last entry note if matching.
-  try {
-    const key = 'zincir-drone-ledger-v1'
-    const raw = localStorage.getItem(key)
-    if (raw) {
-      const list = JSON.parse(raw) as Array<Record<string, unknown>>
-      if (Array.isArray(list) && list[0] && list[0].kind === 'deposit') {
-        list[0].note = `On-chain SOL +${formatAsset(amount, 'sol')} · ${signature.slice(0, 8)}…`
-        list[0].address = signature
-        localStorage.setItem(key, JSON.stringify(list))
-      }
+  asset: 'sol' | 'usdc' = 'sol',
+):
+  | {
+      ok: true
+      balances: ReturnType<typeof normalizeBalances>
+      profilePatch: Partial<PlayerProfile>
     }
-  } catch {
-    // ignore
+  | { ok: false; error: string } {
+  const amt = roundAsset(amount, asset)
+  if (!(amt > 0)) return { ok: false, error: 'Geçersiz tutar' }
+  const balances = normalizeBalances(profile.balances)
+  balances[asset] = roundAsset(balances[asset] + amt, asset)
+  pushLedgerNote(
+    'deposit',
+    asset,
+    amt,
+    `On-chain ${asset.toUpperCase()} +${formatAsset(amt, asset)} · ${signature.slice(0, 8)}…`,
+    signature,
+  )
+  return {
+    ok: true,
+    balances,
+    profilePatch: { balances },
   }
-  return res
 }
