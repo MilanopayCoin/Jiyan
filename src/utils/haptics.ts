@@ -1,6 +1,7 @@
-/** Light haptic helpers — no-ops when Vibration API is unavailable */
+/** Light haptic helpers — Telegram HapticFeedback when in Mini App, else Vibration API */
 
 import type { CraftId } from '../game/types'
+import { tgHaptic } from '../telegram/webApp'
 
 export function vibrate(pattern: number | number[]): void {
   try {
@@ -66,11 +67,32 @@ const CRAFT_HAPTICS: Record<
 }
 
 export const haptic = {
-  tap: (craft: CraftId = 'drone') => vibrate(CRAFT_HAPTICS[craft].tap),
-  climb: (craft: CraftId = 'drone') => vibrate(CRAFT_HAPTICS[craft].climb),
-  land: (craft: CraftId = 'drone') => vibrate(CRAFT_HAPTICS[craft].land),
-  crash: (craft: CraftId = 'drone') => vibrate(CRAFT_HAPTICS[craft].crash),
-  warn: () => vibrate([10, 40, 10]),
-  unlock: () => vibrate([20, 30, 20, 30, 60]),
-  bomb: () => vibrate([25, 20, 45, 20, 70]),
+  tap: (craft: CraftId = 'drone') => {
+    tgHaptic('light')
+    vibrate(CRAFT_HAPTICS[craft].tap)
+  },
+  climb: (craft: CraftId = 'drone') => {
+    tgHaptic('medium')
+    vibrate(CRAFT_HAPTICS[craft].climb)
+  },
+  land: (craft: CraftId = 'drone') => {
+    tgHaptic('success')
+    vibrate(CRAFT_HAPTICS[craft].land)
+  },
+  crash: (craft: CraftId = 'drone') => {
+    tgHaptic('error')
+    vibrate(CRAFT_HAPTICS[craft].crash)
+  },
+  warn: () => {
+    tgHaptic('warning')
+    vibrate([10, 40, 10])
+  },
+  unlock: () => {
+    tgHaptic('success')
+    vibrate([20, 30, 20, 30, 60])
+  },
+  bomb: () => {
+    tgHaptic('heavy')
+    vibrate([25, 20, 45, 20, 70])
+  },
 }

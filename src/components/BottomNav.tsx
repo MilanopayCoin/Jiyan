@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import type { Screen } from '../game/types'
+import { isTelegramMiniApp } from '../telegram/webApp'
 
 interface Props {
   screen: Screen
@@ -17,8 +18,16 @@ const ITEMS: { id: Screen; label: string }[] = [
 export function BottomNav({ screen, onNavigate }: Props) {
   if (screen === 'flight' || screen === 'result') return null
 
+  const tgPad = isTelegramMiniApp()
+
   return (
-    <nav className="absolute inset-x-0 bottom-0 z-40 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+    <nav
+      className={`absolute inset-x-0 bottom-0 z-40 px-4 pt-2 ${
+        tgPad
+          ? 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
+          : 'pb-[max(1rem,env(safe-area-inset-bottom))]'
+      }`}
+    >
       <div className="mx-auto flex max-w-md items-center justify-around rounded-2xl border border-white/10 bg-panel px-2 py-2 backdrop-blur-md">
         {ITEMS.map((item) => {
           const active =

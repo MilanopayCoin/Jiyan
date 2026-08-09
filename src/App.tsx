@@ -9,8 +9,10 @@ import { LeaderboardScreen } from './components/screens/LeaderboardScreen'
 import { ProfileScreen } from './components/screens/ProfileScreen'
 import { HangarScreen } from './components/screens/HangarScreen'
 import { WalletScreen } from './components/screens/WalletScreen'
+import { TelegramChrome } from './components/TelegramChrome'
 import { useGame } from './game/useGame'
 import { useTilt } from './utils/tilt'
+import { useTelegramBootstrap } from './telegram/useTelegram'
 
 function windClass(layer: number, windShake: boolean, shaking: boolean): string {
   if (shaking) return 'shake'
@@ -22,6 +24,7 @@ function windClass(layer: number, windShake: boolean, shaking: boolean): string 
 }
 
 export default function App() {
+  useTelegramBootstrap()
   const game = useGame()
   const showCraft =
     game.screen === 'home' ||
@@ -117,6 +120,7 @@ export default function App() {
       {game.screen === 'wallet' && <WalletScreen game={game} />}
 
       <BottomNav screen={game.screen} onNavigate={game.setScreen} />
+      <TelegramChrome game={game} />
     </div>
   )
 }

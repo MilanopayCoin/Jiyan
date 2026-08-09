@@ -43,6 +43,15 @@ Canlı: https://chaindrone.netlify.app
 - **Gasless USDC** via `/api/sponsor` + `SPONSOR_PRIVATE_KEY`
 - Çekim her zaman **USDC net** (diğer varlıklar FX ile çevrilir)
 - Auto cash-out · günlük check-in · davet ödülleri
+- **Telegram Mini App** (`@twa-dev/sdk`) — MainButton / BackButton, TG kimlik, `startapp` davet, CloudStorage sync, TG haptic
+
+### Telegram Mini App
+
+1. [@BotFather](https://t.me/BotFather) → bot → **/newapp** → Web App URL: `https://chaindrone.netlify.app`
+2. Netlify / `.env`: `VITE_TELEGRAM_BOT_USERNAME=YourBot`
+3. Açılış: `https://t.me/YourBot?startapp=ref_<pilotId>`
+
+İçeride: native **UÇUŞA BAŞLA / İNDİR**, Telegram kullanıcı adı → pilot adı, CloudStorage ile kompakt profil senkronu, davet paylaşımı `t.me/share`.
 
 ### Phantom / Solana
 

@@ -210,3 +210,13 @@ body {
 .wind-layer {
   animation: wind-sway 1.8s ease-in-out infinite;
 }
+
+/* Telegram Mini App: respect TG theme tokens when present */
+html[data-telegram='1'] body {
+  background: var(--tg-bg, var(--color-sky-deep));
+}
+
+body.tg-mini-app {
+  /* Native MainButton / safe areas handled per-screen */
+  overscroll-behavior-y: none;
+}

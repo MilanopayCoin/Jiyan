@@ -104,6 +104,20 @@ import {
   type FriendCard,
 } from './friends'
 import {
+  getStartParam,
+  getTgUser,
+  isTelegramMiniApp,
+  parseRefStartParam,
+  telegramStartAppLink,
+  tgDisplayName,
+  tgShareUrl,
+} from '../telegram/webApp'
+import {
+  mergeCloudBlob,
+  pullCloudProfile,
+  pushCloudProfile,
+} from '../telegram/cloudSync'
+import {
   maybeStreakReminder,
   notifyMissionComplete,
   notifySafeLanding,
@@ -432,6 +446,57 @@ export function useGame() {
 
   useEffect(() => {
     getOrCreatePilotId()
+
+    // Telegram Mini App: identity + startapp invite + CloudStorage
+    if (isTelegramMiniApp()) {
+      const tgUser = getTgUser()
+      if (tgUser) {
+        let profile = loadProfile()
+        let touched = false
+        if (profile.displayName === 'Pilot') {
+          profile = { ...profile, displayName: tgDisplayName(tgUser) }
+          touched = true
+        }
+        if (!profile.badges.includes('telegram-pilot')) {
+          profile = {
+            ...profile,
+            badges: [...profile.badges, 'telegram-pilot'],
+          }
+          touched = true
+        }
+        if (touched) {
+          saveProfile(profile)
+          dispatch({ type: 'SET_PROFILE', profile })
+        }
+      }
+      const refId = parseRefStartParam(getStartParam())
+      if (refId && refId !== getOrCreatePilotId()) {
+        upsertFriend({
+          id: refId,
+          name: 'TG Davet',
+          bestMultiplier: 0,
+          bestLayer: 0,
+          streak: 0,
+          updatedAt: Date.now(),
+        })
+        setFriends(loadFriends())
+        const joined = claimReferralJoin(loadProfile(), refId)
+        if (joined.ok) {
+          saveProfile(joined.profile)
+          dispatch({ type: 'SET_PROFILE', profile: joined.profile })
+          setRetentionHint(joined.message)
+          window.setTimeout(() => setRetentionHint(null), 4000)
+        }
+      }
+      void pullCloudProfile().then((blob) => {
+        if (!blob) return
+        const merged = mergeCloudBlob(loadProfile(), blob)
+        saveProfile(merged)
+        dispatch({ type: 'SET_PROFILE', profile: merged })
+        void pushCloudProfile(merged)
+      })
+    }
+
     const imported = consumeFriendFromUrl()
     if (imported) {
       setFriends(loadFriends())
@@ -627,6 +692,7 @@ export function useGame() {
     void pushScore(profile).then((ok) => {
       if (ok) void refreshSync()
     })
+    void pushCloudProfile(profile)
     return consecutiveSafe
   }, [refreshSync])
 
@@ -1362,9 +1428,17 @@ export function useGame() {
 
   const shareInvite = useCallback(async () => {
     const card = profileToCard(loadProfile())
-    const url = friendInviteUrl(card)
-    const text = `Zincir: Drone — ${card.name} seni filo'ya davet ediyor! Rekor ${fmtX(card.bestMultiplier)} · ${url}`
+    const webUrl = friendInviteUrl(card)
+    const tgUrl = telegramStartAppLink(card.id)
+    const url = tgUrl || webUrl
+    const text = `Zincir: Drone — ${card.name} seni filo'ya davet ediyor! Rekor ${fmtX(card.bestMultiplier)}`
     try {
+      if (isTelegramMiniApp() && tgUrl) {
+        tgShareUrl(tgUrl, text)
+        setSyncHint('Telegram daveti açıldı')
+        window.setTimeout(() => setSyncHint(null), 2200)
+        return true
+      }
       if (navigator.share) {
         await navigator.share({ title: 'Zincir: Drone Davet', text, url })
       } else {

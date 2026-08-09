@@ -579,6 +579,7 @@ export const BADGE_LABELS: Record<string, string> = {
   'goz-kalkani': 'Göz Kalkanı',
   'gulumseme-inis': 'Gülümseme İniş',
   'selfie-pilot': 'Selfie Pilot',
+  'telegram-pilot': 'Telegram Pilot',
   'cuzdan-bagli': 'Cüzdan Bağlı',
   'cuzdan-acildi': 'Kripto Cüzdan',
   'checkin-pilot': 'Check-in Pilotu',

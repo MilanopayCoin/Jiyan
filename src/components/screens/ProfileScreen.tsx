@@ -19,6 +19,11 @@ import {
   verifyFairness,
 } from '../../game/fairness'
 import type { FlightResult } from '../../game/types'
+import {
+  getTgUser,
+  isTelegramMiniApp,
+  telegramStartAppLink,
+} from '../../telegram/webApp'
 
 interface Props {
   game: GameApi
@@ -112,6 +117,8 @@ export function ProfileScreen({ game }: Props) {
   }
 
   const checkPreview = game.checkInPreview
+  const tgUser = isTelegramMiniApp() ? getTgUser() : null
+  const tgInvite = telegramStartAppLink(game.pilotId)
 
   return (
     <div className="relative z-20 flex h-full flex-col overflow-y-auto px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
@@ -123,6 +130,7 @@ export function ProfileScreen({ game }: Props) {
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-ice">
               Pilot kartı
+              {tgUser ? ' · Telegram' : ''}
             </p>
             <p className="mt-1 font-display text-3xl text-white">
               {profile.displayName}
@@ -131,6 +139,7 @@ export function ProfileScreen({ game }: Props) {
               {craft.name}
               {skin.rarity !== 'common' ? ` · ${skin.name}` : ''} ·{' '}
               {formatPilotCode(game.pilotId)}
+              {tgUser?.username ? ` · @${tgUser.username}` : ''}
             </p>
           </div>
           <div className="text-right">
@@ -147,7 +156,7 @@ export function ProfileScreen({ game }: Props) {
             onClick={onShareInvite}
             className="rounded-full bg-signal/20 px-3 py-1.5 text-xs text-signal"
           >
-            Davet paylaş
+            {tgInvite ? 'TG davet' : 'Davet paylaş'}
           </button>
           <button
             type="button"
