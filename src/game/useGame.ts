@@ -94,9 +94,11 @@ import {
 } from '../utils/skyDetect'
 import {
   consumeFriendFromUrl,
+  friendInviteUrl,
   friendsToEntries,
   getOrCreatePilotId,
   loadFriends,
+  profileToCard,
   removeFriend as removeFriendStorage,
   upsertFriend,
   type FriendCard,
@@ -1223,6 +1225,36 @@ export function useGame() {
     }
   }, [])
 
+  const shareInvite = useCallback(async () => {
+    const card = profileToCard(loadProfile())
+    const url = friendInviteUrl(card)
+    const text = `Zincir: Drone — ${card.name} seni filo'ya davet ediyor! Rekor ${fmtX(card.bestMultiplier)} · ${url}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Zincir: Drone Davet', text, url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        setSyncHint('Davet linki kopyalandı')
+        window.setTimeout(() => setSyncHint(null), 2200)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
+  const copyPilotCode = useCallback(async () => {
+    const id = getOrCreatePilotId()
+    try {
+      await navigator.clipboard.writeText(id)
+      setSyncHint('Pilot kodu kopyalandı')
+      window.setTimeout(() => setSyncHint(null), 2200)
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   return {
     ...state,
     startFlight,
@@ -1255,6 +1287,9 @@ export function useGame() {
     disableNotifications,
     refreshSync,
     shareDaily,
+    shareInvite,
+    copyPilotCode,
+    pilotId: getOrCreatePilotId(),
     setAutoCashOut,
     doCheckIn,
     canCheckInToday: canCheckIn(state.profile),
