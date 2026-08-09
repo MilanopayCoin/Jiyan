@@ -53,6 +53,13 @@ Canlı: https://chaindrone.netlify.app
 
 İçeride: native **UÇUŞA BAŞLA / İNDİR**, Telegram kullanıcı adı → pilot adı, CloudStorage ile kompakt profil senkronu, davet paylaşımı `t.me/share`.
 
+Telegram filo özellikleri:
+- **Filo düellosu** — `startapp=d_<id>` · aynı seed · `/api/duel`
+- **Boost masa $5** — Premium / kanal · +0.50 USDC cashback
+- **Story iniş** — sonuç kartı → `shareToStory` (`/api/story-media`)
+- **Chat kör uçuş** — grup seed · `startapp=cb_<token>`
+- **Stars bahis** — 50⭐ / uçuş · `TELEGRAM_BOT_TOKEN` + `/api/stars-invoice` (yoksa demo credit)
+
 ### Phantom / Solana
 
 Extension (`injected`) App ID olmadan çalışır. Google/Apple için `VITE_PHANTOM_APP_ID`.

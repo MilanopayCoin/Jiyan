@@ -45,6 +45,9 @@ function base(over: Partial<PlayerProfile> = {}): PlayerProfile {
     referredBy: null,
     referralClaimed: false,
     friendMilestonesClaimed: [],
+    starsBalance: 0,
+    payWithStars: false,
+    starsWelcomeClaimed: false,
     ...over,
   }
 }

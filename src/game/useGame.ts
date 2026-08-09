@@ -107,16 +107,39 @@ import {
   getStartParam,
   getTgUser,
   isTelegramMiniApp,
-  parseRefStartParam,
   telegramStartAppLink,
   tgDisplayName,
   tgShareUrl,
+  tgSwitchInlineQuery,
 } from '../telegram/webApp'
 import {
   mergeCloudBlob,
   pullCloudProfile,
   pushCloudProfile,
 } from '../telegram/cloudSync'
+import { parseStartParam } from '../telegram/startParams'
+import {
+  duelInviteUrl,
+  duelSeed,
+  duelVerdict,
+  fetchDuel,
+  newDuelId,
+  pushDuelScore,
+  type DuelState,
+} from '../telegram/duel'
+import { BOOST_TABLE_USD, hasBoostAccess } from '../telegram/boost'
+import {
+  chatBlindInviteUrl,
+  chatBlindSeed,
+  chatBlindToken,
+  isGroupChatOpen,
+} from '../telegram/chatBlind'
+import {
+  STARS_FLIGHT_COST,
+  STARS_WELCOME,
+  buyStarsPack,
+} from '../telegram/stars'
+import { shareResultToStory } from '../telegram/story'
 import {
   maybeStreakReminder,
   notifyMissionComplete,
@@ -404,6 +427,14 @@ export function useGame() {
   const [remoteTop, setRemoteTop] = useState<FriendCard[]>([])
   const [syncHint, setSyncHint] = useState<string | null>(null)
   const [retentionHint, setRetentionHint] = useState<string | null>(null)
+  const [activeDuelId, setActiveDuelId] = useState<string | null>(null)
+  const [duelBoard, setDuelBoard] = useState<DuelState | null>(null)
+  const [pendingChatBlind, setPendingChatBlind] = useState<string | null>(null)
+  const [boostUnlocked, setBoostUnlocked] = useState(() => hasBoostAccess())
+  const duelIdRef = useRef<string | null>(null)
+  const chatBlindRef = useRef<string | null>(null)
+  const boostTableRef = useRef(false)
+  const starsStakeRef = useRef(0)
   const consecutiveRef = useRef(state.consecutiveSafe)
   const animatingRef = useRef(false)
   const craftRef = useRef(state.profile.selectedCraft)
@@ -469,10 +500,10 @@ export function useGame() {
           dispatch({ type: 'SET_PROFILE', profile })
         }
       }
-      const refId = parseRefStartParam(getStartParam())
-      if (refId && refId !== getOrCreatePilotId()) {
+      const start = parseStartParam(getStartParam())
+      if (start?.kind === 'ref' && start.pilotId !== getOrCreatePilotId()) {
         upsertFriend({
-          id: refId,
+          id: start.pilotId,
           name: 'TG Davet',
           bestMultiplier: 0,
           bestLayer: 0,
@@ -480,7 +511,7 @@ export function useGame() {
           updatedAt: Date.now(),
         })
         setFriends(loadFriends())
-        const joined = claimReferralJoin(loadProfile(), refId)
+        const joined = claimReferralJoin(loadProfile(), start.pilotId)
         if (joined.ok) {
           saveProfile(joined.profile)
           dispatch({ type: 'SET_PROFILE', profile: joined.profile })
@@ -488,6 +519,48 @@ export function useGame() {
           window.setTimeout(() => setRetentionHint(null), 4000)
         }
       }
+      if (start?.kind === 'duel') {
+        setActiveDuelId(start.duelId)
+        duelIdRef.current = start.duelId
+        void fetchDuel(start.duelId).then((d) => {
+          if (d) setDuelBoard(d)
+        })
+        setRetentionHint('Filo düellosu · aynı seed')
+        window.setTimeout(() => setRetentionHint(null), 3500)
+      }
+      if (start?.kind === 'chatBlind') {
+        setPendingChatBlind(start.token)
+        chatBlindRef.current = start.token
+        setRetentionHint('Chat kör uçuş hazır')
+        window.setTimeout(() => setRetentionHint(null), 3500)
+      }
+      if (start?.kind === 'boost') {
+        setBoostUnlocked(true)
+      }
+      if (isGroupChatOpen() && !start) {
+        const tok = chatBlindToken()
+        setPendingChatBlind(tok)
+        chatBlindRef.current = tok
+      }
+      // Welcome Stars
+      {
+        const p = loadProfile()
+        if (!p.starsWelcomeClaimed) {
+          const gifted: PlayerProfile = {
+            ...p,
+            starsBalance: p.starsBalance + STARS_WELCOME,
+            starsWelcomeClaimed: true,
+            badges: p.badges.includes('stars-pilot')
+              ? p.badges
+              : [...p.badges, 'stars-pilot'],
+          }
+          saveProfile(gifted)
+          dispatch({ type: 'SET_PROFILE', profile: gifted })
+          setRetentionHint(`+${STARS_WELCOME} Stars hoşgeldin`)
+          window.setTimeout(() => setRetentionHint(null), 3500)
+        }
+      }
+      setBoostUnlocked(hasBoostAccess(start?.kind === 'boost'))
       void pullCloudProfile().then((blob) => {
         if (!blob) return
         const merged = mergeCloudBlob(loadProfile(), blob)
@@ -495,6 +568,24 @@ export function useGame() {
         dispatch({ type: 'SET_PROFILE', profile: merged })
         void pushCloudProfile(merged)
       })
+    }
+
+    // Web query fallbacks (?duel= ?cb= ?boost=1)
+    try {
+      const q = new URL(location.href)
+      const duelQ = q.searchParams.get('duel')
+      const cbQ = q.searchParams.get('cb')
+      if (duelQ) {
+        setActiveDuelId(duelQ)
+        duelIdRef.current = duelQ
+      }
+      if (cbQ) {
+        setPendingChatBlind(cbQ)
+        chatBlindRef.current = cbQ
+      }
+      if (q.searchParams.get('boost') === '1') setBoostUnlocked(true)
+    } catch {
+      // ignore
     }
 
     const imported = consumeFriendFromUrl()
@@ -693,6 +784,20 @@ export function useGame() {
       if (ok) void refreshSync()
     })
     void pushCloudProfile(profile)
+
+    if (settled.duelId) {
+      const me = getOrCreatePilotId()
+      void pushDuelScore(settled.duelId, {
+        pilotId: me,
+        name: profile.displayName,
+        multiplier: settled.outcome === 'cashed' ? settled.multiplier : 0,
+        layer: settled.layer,
+        outcome: settled.outcome,
+        at: settled.timestamp,
+      }).then((board) => {
+        if (board) setDuelBoard(board)
+      })
+    }
     return consecutiveSafe
   }, [refreshSync])
 
@@ -757,46 +862,67 @@ export function useGame() {
     setNotifOn(false)
   }, [])
 
-  const startFlight = useCallback(async (opts?: { challenge?: boolean; blind?: boolean }) => {
+  const startFlight = useCallback(async (opts?: {
+    challenge?: boolean
+    blind?: boolean
+    duelId?: string
+    chatBlind?: boolean
+    boostTable?: boolean
+    payWithStars?: boolean
+  }) => {
     const profile = loadProfile()
     let payAsset = isAssetId(profile.payAsset) ? profile.payAsset : 'usdc'
     if (!profile.highRoller && payAsset !== 'usdt' && payAsset !== 'usdc') {
       payAsset = 'usdc'
     }
-    const tableStakes = profile.highRoller
-      ? ASSETS[payAsset].stakes
-      : [1, 5, 10]
-    const stakeAmt =
+    const boostTable =
+      Boolean(opts?.boostTable) && hasBoostAccess(boostUnlocked)
+    let stakeAmt =
       Number.isFinite(profile.stakeAmount) && profile.stakeAmount > 0
         ? roundAsset(profile.stakeAmount, payAsset)
         : profile.highRoller
           ? ASSETS[payAsset].flightStake
           : 1
-    if (
-      profile.payWithCrypto &&
-      !tableStakes.some((o) => Math.abs(o - stakeAmt) < 1e-12)
-    ) {
-      // allow exact match only for table / high-roller presets
+    if (boostTable) {
+      payAsset = 'usdc'
+      stakeAmt = BOOST_TABLE_USD
     }
-    const useCrypto = canStakeCrypto(profile, payAsset, stakeAmt)
+    const useStars =
+      Boolean(opts?.payWithStars || profile.payWithStars) &&
+      profile.starsBalance >= STARS_FLIGHT_COST
+    const useCrypto = !useStars && canStakeCrypto(profile, payAsset, stakeAmt)
 
-    if (!useCrypto && profile.flightCredits <= 0) return false
+    if (!useStars && !useCrypto && profile.flightCredits <= 0) return false
 
     const craftId = profile.selectedCraft
     const skinId = profile.selectedSkin
-    const challenge = Boolean(opts?.challenge)
-    const blind = Boolean(opts?.blind) && !challenge
+    // Only attach duel/chat modes when explicitly requested
+    const duelId = opts?.duelId || null
+    const chatTok = opts?.chatBlind
+      ? pendingChatBlind || chatBlindToken()
+      : null
+    const challenge = Boolean(opts?.challenge) && !duelId && !chatTok
+    const blind =
+      (Boolean(opts?.blind) || Boolean(chatTok)) && !challenge && !duelId
     challengeRef.current = challenge
     blindRef.current = blind
     ufoShieldRef.current = craftId === 'ufo'
-    eyeShieldRef.current = !challenge && !blind
+    eyeShieldRef.current = !challenge && !blind && !duelId
     eyeShieldUsedRef.current = false
     smileCashOutRef.current = false
     gazeRef.current = false
+    duelIdRef.current = duelId
+    chatBlindRef.current = chatTok
+    boostTableRef.current = boostTable
+    starsStakeRef.current = useStars ? STARS_FLIGHT_COST : 0
 
-    const fairSeed = challenge
-      ? `zincir-challenge-${todayKey()}-${craftId}`
-      : makeFlightSeed(blind ? 'blind' : 'normal')
+    const fairSeed = duelId
+      ? duelSeed(duelId, craftId)
+      : chatTok
+        ? chatBlindSeed(chatTok, craftId)
+        : challenge
+          ? `zincir-challenge-${todayKey()}-${craftId}`
+          : makeFlightSeed(blind ? 'blind' : 'normal')
     fairSeedRef.current = fairSeed
     fairCommitRef.current = ''
     fairRollsRef.current = 0
@@ -807,7 +933,14 @@ export function useGame() {
     setFairCommit(commit)
 
     let spent: PlayerProfile = { ...profile }
-    if (useCrypto) {
+    if (useStars) {
+      spent = {
+        ...spent,
+        starsBalance: spent.starsBalance - STARS_FLIGHT_COST,
+      }
+      stakeAssetRef.current = null
+      stakeAmountRef.current = 0
+    } else if (useCrypto) {
       const staked = stakeForFlight(spent, payAsset, stakeAmt)
       if (!staked.ok) return false
       spent = {
@@ -839,13 +972,18 @@ export function useGame() {
 
     const takeoffMs = Math.round(700 / CRAFTS[craftId].climbVisual)
     const fairLock = () => challengeRef.current || blindRef.current
-    const stakeMeta = () =>
-      stakeAssetRef.current && stakeAmountRef.current > 0
+    const stakeMeta = () => ({
+      ...(stakeAssetRef.current && stakeAmountRef.current > 0
         ? {
             stakeAsset: stakeAssetRef.current,
             stakeAmount: stakeAmountRef.current,
           }
-        : {}
+        : {}),
+      ...(duelIdRef.current ? { duelId: duelIdRef.current } : {}),
+      ...(chatBlindRef.current ? { chatBlind: true } : {}),
+      ...(boostTableRef.current ? { boostTable: true } : {}),
+      ...(starsStakeRef.current > 0 ? { starsStake: starsStakeRef.current } : {}),
+    })
 
     window.setTimeout(() => {
       const rng = rngRef.current
@@ -930,7 +1068,7 @@ export function useGame() {
       }
     }, takeoffMs)
     return true
-  }, [persistResult, enrichResult])
+  }, [persistResult, enrichResult, pendingChatBlind, boostUnlocked])
 
   const armBomb = useCallback(() => {
     if (state.challengeMode || state.blindMode || challengeRef.current || blindRef.current)
@@ -1052,6 +1190,12 @@ export function useGame() {
                 stakeAmount: stakeAmountRef.current,
               }
             : {}),
+          ...(duelIdRef.current ? { duelId: duelIdRef.current } : {}),
+          ...(chatBlindRef.current ? { chatBlind: true } : {}),
+          ...(boostTableRef.current ? { boostTable: true } : {}),
+          ...(starsStakeRef.current > 0
+            ? { starsStake: starsStakeRef.current }
+            : {}),
         })
         haptic.crash(craftId)
         sfx.crash(craftId)
@@ -1117,6 +1261,12 @@ export function useGame() {
               stakeAssetRef.current,
             ),
           }
+        : {}),
+      ...(duelIdRef.current ? { duelId: duelIdRef.current } : {}),
+      ...(chatBlindRef.current ? { chatBlind: true } : {}),
+      ...(boostTableRef.current ? { boostTable: true } : {}),
+      ...(starsStakeRef.current > 0
+        ? { starsStake: starsStakeRef.current }
         : {}),
     })
     smileCashOutRef.current = false
@@ -1464,6 +1614,104 @@ export function useGame() {
     }
   }, [])
 
+  const createDuel = useCallback(async () => {
+    const id = newDuelId()
+    setActiveDuelId(id)
+    duelIdRef.current = id
+    const url = duelInviteUrl(id)
+    const query = `Zincir düello ${id}`
+    if (isTelegramMiniApp()) {
+      tgSwitchInlineQuery(query)
+      if (url) tgShareUrl(url, 'Filo düellosu — aynı seed, kim daha yüksek iner?')
+    } else if (url) {
+      try {
+        await navigator.clipboard.writeText(url)
+        setRetentionHint('Düello linki kopyalandı')
+        window.setTimeout(() => setRetentionHint(null), 2500)
+      } catch {
+        setRetentionHint(`Düello: ${id}`)
+      }
+    }
+    return id
+  }, [])
+
+  const startDuelFlight = useCallback(() => {
+    const id = activeDuelId || duelIdRef.current || newDuelId()
+    setActiveDuelId(id)
+    duelIdRef.current = id
+    return startFlight({ duelId: id })
+  }, [activeDuelId, startFlight])
+
+  const startChatBlindFlight = useCallback(() => {
+    const tok = pendingChatBlind || chatBlindToken()
+    setPendingChatBlind(tok)
+    chatBlindRef.current = tok
+    return startFlight({ chatBlind: true, blind: true })
+  }, [pendingChatBlind, startFlight])
+
+  const startBoostFlight = useCallback(() => {
+    if (!hasBoostAccess(boostUnlocked)) {
+      setRetentionHint('Boost / Premium gerekli')
+      window.setTimeout(() => setRetentionHint(null), 2500)
+      return false
+    }
+    return startFlight({ boostTable: true })
+  }, [boostUnlocked, startFlight])
+
+  const setPayWithStars = useCallback((on: boolean) => {
+    const profile = loadProfile()
+    const next = { ...profile, payWithStars: on }
+    saveProfile(next)
+    dispatch({ type: 'SET_PROFILE', profile: next })
+  }, [])
+
+  const purchaseStars = useCallback(async () => {
+    const status = await buyStarsPack(STARS_WELCOME)
+    if (status === 'paid' || status === 'demo') {
+      const profile = loadProfile()
+      const next: PlayerProfile = {
+        ...profile,
+        starsBalance: profile.starsBalance + STARS_WELCOME,
+        badges: profile.badges.includes('stars-pilot')
+          ? profile.badges
+          : [...profile.badges, 'stars-pilot'],
+      }
+      saveProfile(next)
+      dispatch({ type: 'SET_PROFILE', profile: next })
+      setRetentionHint(
+        status === 'demo'
+          ? `+${STARS_WELCOME} Stars (demo)`
+          : `+${STARS_WELCOME} Stars`,
+      )
+      window.setTimeout(() => setRetentionHint(null), 2800)
+      return true
+    }
+    setRetentionHint(status === 'cancelled' ? 'Stars iptal' : 'Stars başarısız')
+    window.setTimeout(() => setRetentionHint(null), 2500)
+    return false
+  }, [])
+
+  const shareStory = useCallback(async () => {
+    const result = state.result
+    if (!result) return 'failed' as const
+    const mode = await shareResultToStory(result, state.profile.displayName)
+    if (mode === 'shared') {
+      setRetentionHint('Story paylaşıldı')
+      window.setTimeout(() => setRetentionHint(null), 2500)
+    } else if (mode === 'unsupported') {
+      setRetentionHint('Story bu istemcide yok')
+      window.setTimeout(() => setRetentionHint(null), 2500)
+    }
+    return mode
+  }, [state.result, state.profile.displayName])
+
+  const shareChatBlind = useCallback(() => {
+    const tok = pendingChatBlind || chatBlindToken()
+    const url = chatBlindInviteUrl(tok)
+    if (url) tgShareUrl(url, 'Chat kör uçuş — aynı seed, LED kapalı!')
+    return url
+  }, [pendingChatBlind])
+
   const completeSelfie = useCallback(() => {
     const result = state.result
     if (!result || result.outcome !== 'cashed' || result.selfieCaptured) {
@@ -1497,6 +1745,27 @@ export function useGame() {
     setSkySample,
     setFaceSample,
     completeSelfie,
+    createDuel,
+    startDuelFlight,
+    startChatBlindFlight,
+    startBoostFlight,
+    setPayWithStars,
+    purchaseStars,
+    shareStory,
+    shareChatBlind,
+    activeDuelId,
+    duelBoard,
+    duelVerdictText: (() => {
+      if (!activeDuelId || !duelBoard || !state.result?.duelId) return null
+      const me = getOrCreatePilotId()
+      const mine = duelBoard.scores.find((s) => s.pilotId === me)
+      const other = duelBoard.scores.find((s) => s.pilotId !== me)
+      if (!mine) return null
+      return duelVerdict(mine, other)
+    })(),
+    pendingChatBlind,
+    boostUnlocked,
+    starsFlightCost: STARS_FLIGHT_COST,
     goHome,
     setScreen,
     hideTip,

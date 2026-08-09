@@ -35,7 +35,9 @@ export function HomeScreen({ game }: Props) {
   const payAsset = game.profile.payAsset
   const stakeAmt = game.profile.stakeAmount || (game.profile.highRoller ? ASSETS[payAsset].flightStake : 1)
   const cryptoOk = canStakeCrypto(game.profile, payAsset, stakeAmt)
-  const noCredits = !cryptoOk && game.profile.flightCredits <= 0
+  const starsOk = game.profile.starsBalance >= game.starsFlightCost
+  const noCredits =
+    !cryptoOk && !starsOk && game.profile.flightCredits <= 0
   const craft = CRAFTS[game.profile.selectedCraft]
   const skin = SKINS[game.profile.selectedSkin]
   const points = scorePoints(game.profile.totalCashed)
@@ -102,6 +104,16 @@ export function HomeScreen({ game }: Props) {
               {game.profile.bombs ?? 0}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => void game.purchaseStars()}
+            className="rounded-full border border-amber/30 bg-amber/10 px-4 py-1.5 backdrop-blur-sm"
+          >
+            <span className="text-xs text-fog">Stars </span>
+            <span className="font-display text-xl text-amber">
+              {game.profile.starsBalance}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => game.setScreen('wallet')}
@@ -350,6 +362,73 @@ export function HomeScreen({ game }: Props) {
             >
               Paylaş
             </button>
+          </div>
+        </div>
+
+        <div className="mb-3 rounded-2xl border border-ice/25 bg-ice/10 px-4 py-3 backdrop-blur-md">
+          <p className="text-xs uppercase tracking-wider text-ice">
+            Telegram filo
+          </p>
+          <p className="mt-0.5 text-sm text-white">
+            Düello · boost · chat kör · Stars
+          </p>
+          {game.retentionHint && (
+            <p className="mt-1 text-xs text-signal">{game.retentionHint}</p>
+          )}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => void game.createDuel()}
+              className="rounded-xl border border-white/15 py-2 text-xs text-white"
+            >
+              Düello kur
+            </button>
+            <button
+              type="button"
+              disabled={noCredits && game.profile.starsBalance < game.starsFlightCost}
+              onClick={() => void game.startDuelFlight()}
+              className="rounded-xl bg-signal/20 py-2 text-xs font-semibold text-signal disabled:opacity-40"
+            >
+              {game.activeDuelId ? 'Düello uç' : 'Düello başlat'}
+            </button>
+            <button
+              type="button"
+              disabled={!game.boostUnlocked}
+              onClick={() => void game.startBoostFlight()}
+              className="rounded-xl bg-amber/20 py-2 text-xs font-semibold text-amber disabled:opacity-40"
+            >
+              Boost $5
+            </button>
+            <button
+              type="button"
+              onClick={() => void game.startChatBlindFlight()}
+              className="rounded-xl bg-ice/20 py-2 text-xs font-semibold text-ice"
+            >
+              Chat kör
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => game.setPayWithStars(!game.profile.payWithStars)}
+              className={`rounded-full px-3 py-1 text-[11px] ${
+                game.profile.payWithStars
+                  ? 'bg-amber/25 text-amber'
+                  : 'border border-white/15 text-fog'
+              }`}
+            >
+              Stars bahis · {game.starsFlightCost}⭐
+            </button>
+            <button
+              type="button"
+              onClick={() => game.shareChatBlind()}
+              className="rounded-full border border-white/15 px-3 py-1 text-[11px] text-fog"
+            >
+              Chat link
+            </button>
+            {!game.boostUnlocked && (
+              <span className="text-[10px] text-fog">Boost: Premium / kanal</span>
+            )}
           </div>
         </div>
 

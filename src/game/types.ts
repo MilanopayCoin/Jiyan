@@ -80,6 +80,14 @@ export interface FlightResult {
   fairCrashFlags?: boolean[]
   /** Ledger entry id for this flight settlement */
   ledgerId?: string
+  /** Filo düellosu id */
+  duelId?: string
+  /** Shared chat blind flight */
+  chatBlind?: boolean
+  /** Boost-gated $5 table flight */
+  boostTable?: boolean
+  /** Stars spent for this flight */
+  starsStake?: number
 }
 
 export interface DailyMission {
@@ -139,6 +147,12 @@ export interface PlayerProfile {
   referralClaimed: boolean
   /** Friend-count milestones already paid */
   friendMilestonesClaimed: number[]
+  /** Telegram Stars balance (local + invoice top-ups) */
+  starsBalance: number
+  /** Prefer Stars stake over pil/crypto when enough */
+  payWithStars: boolean
+  /** Welcome Stars claimed inside Mini App */
+  starsWelcomeClaimed: boolean
 }
 
 export interface LeaderboardEntry {

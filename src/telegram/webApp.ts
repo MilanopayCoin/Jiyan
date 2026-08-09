@@ -139,3 +139,30 @@ export function parseRefStartParam(param: string | null): string | null {
   const m = param.match(/^ref_([A-Za-z0-9_-]{4,64})$/)
   return m?.[1] ?? null
 }
+
+export function tgSwitchInlineQuery(query: string): void {
+  if (!isTelegramMiniApp()) return
+  try {
+    WebApp.switchInlineQuery(query, ['users', 'groups'])
+  } catch {
+    // ignore
+  }
+}
+
+export function tgShareToStory(
+  mediaUrl: string,
+  params?: { text?: string; widget_link?: { url: string; name?: string } },
+): boolean {
+  if (!isTelegramMiniApp()) return false
+  try {
+    if (!WebApp.isVersionAtLeast('7.8')) return false
+    WebApp.shareToStory(mediaUrl, params)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function isTgPremium(): boolean {
+  return Boolean(getTgUser()?.is_premium)
+}

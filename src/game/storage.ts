@@ -76,6 +76,9 @@ export function defaultProfile(): PlayerProfile {
     referredBy: null,
     referralClaimed: false,
     friendMilestonesClaimed: [],
+    starsBalance: 0,
+    payWithStars: false,
+    starsWelcomeClaimed: false,
   }
 }
 
@@ -162,6 +165,12 @@ function migrateProfile(raw: Partial<PlayerProfile> & Record<string, unknown>): 
     friendMilestonesClaimed: Array.isArray(raw.friendMilestonesClaimed)
       ? (raw.friendMilestonesClaimed as number[]).filter((n) => typeof n === 'number')
       : [],
+    starsBalance:
+      typeof raw.starsBalance === 'number' && raw.starsBalance >= 0
+        ? Math.floor(raw.starsBalance)
+        : 0,
+    payWithStars: Boolean(raw.payWithStars),
+    starsWelcomeClaimed: Boolean(raw.starsWelcomeClaimed),
   }
 }
 
@@ -308,8 +317,21 @@ export function applyFlightResult(
   if (result.selfieCaptured && result.outcome === 'cashed') {
     badges.add('selfie-pilot')
   }
+  if (result.duelId) badges.add('filo-duello')
+  if (result.chatBlind && result.outcome === 'cashed') badges.add('chat-kor')
+  if (result.boostTable) badges.add('boost-masa')
+  if (result.starsStake && result.starsStake > 0) badges.add('stars-pilot')
   if (result.craftId === 'kite' && result.outcome === 'cashed' && result.layer >= 5) {
     badges.add('arac-kite')
+  }
+
+  // Boost table cashback on safe landing
+  let balances = normalizeBalances(profile.balances)
+  if (result.boostTable && result.outcome === 'cashed') {
+    balances = {
+      ...balances,
+      usdc: roundAsset(balances.usdc + 0.5, 'usdc'),
+    }
   }
 
   // Auto-unlock milestone skins (no spend) when requirements met
@@ -339,6 +361,7 @@ export function applyFlightResult(
     missions,
     missionDate: today,
     unlockedSkins: Array.from(unlockedSkins) as CraftSkinId[],
+    balances,
   }
 
   saveProfile(next)
@@ -580,6 +603,10 @@ export const BADGE_LABELS: Record<string, string> = {
   'gulumseme-inis': 'Gülümseme İniş',
   'selfie-pilot': 'Selfie Pilot',
   'telegram-pilot': 'Telegram Pilot',
+  'filo-duello': 'Filo Düellosu',
+  'chat-kor': 'Chat Kör Uçuş',
+  'boost-masa': 'Boost Masa',
+  'stars-pilot': 'Stars Pilot',
   'cuzdan-bagli': 'Cüzdan Bağlı',
   'cuzdan-acildi': 'Kripto Cüzdan',
   'checkin-pilot': 'Check-in Pilotu',

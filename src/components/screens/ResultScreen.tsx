@@ -208,6 +208,23 @@ export function ResultScreen({ game }: Props) {
               Ön kamerada yüzünü 2 sn tut — selfie rozeti
             </p>
           )}
+          {result.duelId && (
+            <p className="mt-2 text-xs text-signal">
+              Düello {result.duelId}
+              {game.duelVerdictText ? ` · ${game.duelVerdictText}` : ''}
+            </p>
+          )}
+          {result.chatBlind && (
+            <p className="mt-2 text-xs text-ice">Chat kör uçuş</p>
+          )}
+          {result.boostTable && (
+            <p className="mt-2 text-xs text-amber">
+              Boost masa{won ? ' · +0.50 USDC cashback' : ''}
+            </p>
+          )}
+          {result.starsStake != null && result.starsStake > 0 && (
+            <p className="mt-2 text-xs text-amber">-{result.starsStake} Stars</p>
+          )}
           {game.retentionHint && (
             <p className="mt-2 text-xs text-signal">{game.retentionHint}</p>
           )}
@@ -292,14 +309,25 @@ export function ResultScreen({ game }: Props) {
           </button>
           <button
             type="button"
+            onClick={() => void game.shareStory()}
+            className="rounded-xl border border-ice/30 bg-ice/10 py-3.5 text-sm font-medium text-ice"
+          >
+            Story
+          </button>
+          <button
+            type="button"
             onClick={() => {
-              if (game.profile.flightCredits > 0 || game.profile.payWithCrypto) {
+              if (
+                game.profile.flightCredits > 0 ||
+                game.profile.payWithCrypto ||
+                game.profile.starsBalance >= game.starsFlightCost
+              ) {
                 game.startFlight()
               } else {
                 game.goHome()
               }
             }}
-            className="rounded-xl py-3.5 text-sm font-semibold text-ink"
+            className="col-span-2 rounded-xl py-3.5 text-sm font-semibold text-ink"
             style={{
               background: 'linear-gradient(135deg, #3dffa8, #7dd3fc)',
             }}
