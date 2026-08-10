@@ -164,7 +164,7 @@ export function WalletScreen({ game }: Props) {
       <label className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-panel px-4 py-3">
         <div>
           <p className="text-sm text-white">Kripto ile oyna</p>
-          <p className="text-xs text-fog">Kapalıysa ücretsiz pil kullanılır</p>
+          <p className="text-xs text-fog">Kapalıysa ücretsiz uçuş</p>
         </div>
         <input
           type="checkbox"

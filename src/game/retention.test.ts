@@ -6,7 +6,6 @@ import {
   claimReferralJoin,
   nextCheckInDay,
   previewCheckIn,
-  REFERRAL_JOIN_CREDITS,
   REFERRAL_JOIN_USDT,
 } from './retention'
 import { ASSETS, emptyBalances } from './assets'
@@ -23,7 +22,7 @@ function base(over: Partial<PlayerProfile> = {}): PlayerProfile {
     totalCashed: 0,
     streak: 0,
     lastFlightDate: null,
-    flightCredits: 10,
+    flightCredits: 0,
     bombs: 0,
     lastBombGrantDate: null,
     badges: [],
@@ -66,7 +65,7 @@ describe('retention', () => {
     const res = claimCheckIn(base())
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    expect(res.profile.flightCredits).toBe(12)
+    expect(res.profile.balances.usdt).toBe(1)
     expect(res.profile.checkInStreak).toBe(1)
     expect(canCheckIn(res.profile)).toBe(false)
   })
@@ -86,7 +85,6 @@ describe('retention', () => {
     expect(first.ok).toBe(true)
     if (!first.ok) return
     expect(first.profile.balances.usdt).toBe(REFERRAL_JOIN_USDT)
-    expect(first.profile.flightCredits).toBe(10 + REFERRAL_JOIN_CREDITS)
     expect(claimReferralJoin(first.profile, 'pref1234').ok).toBe(false)
   })
 
@@ -95,6 +93,7 @@ describe('retention', () => {
     expect(m1?.ok).toBe(true)
     if (!m1?.ok) return
     expect(m1.profile.friendMilestonesClaimed).toContain(1)
+    expect(m1.profile.balances.usdt).toBe(2)
     const again = claimFriendMilestones(m1.profile, 1)
     expect(again).toBeNull()
     const m3 = claimFriendMilestones(m1.profile, 3)

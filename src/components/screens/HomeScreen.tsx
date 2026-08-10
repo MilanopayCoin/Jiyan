@@ -12,6 +12,7 @@ import {
   stakePresets,
   totalUsdBalance,
 } from '../../game/stableEconomy'
+import { scorePoints } from '../../game/vehicles'
 
 interface Props {
   game: GameApi
@@ -36,12 +37,11 @@ export function HomeScreen({ game }: Props) {
     game.profile.stakeAmount ||
     (game.profile.highRoller ? ASSETS[payAsset].flightStake : 1)
   const cryptoOk = canStakeCrypto(game.profile, payAsset, stakeAmt)
-  const starsOk = game.profile.starsBalance >= game.starsFlightCost
-  const noCredits = !cryptoOk && !starsOk && game.profile.flightCredits <= 0
   const craft = CRAFTS[game.profile.selectedCraft]
   const skin = SKINS[game.profile.selectedSkin]
   const bal = normalizeBalances(game.profile.balances)[payAsset]
   const usdTotal = totalUsdBalance(normalizeBalances(game.profile.balances))
+  const points = scorePoints(game.profile.totalCashed)
   const checkPreview = game.checkInPreview
   const presets = stakePresets(payAsset, game.profile.highRoller)
 
@@ -70,10 +70,8 @@ export function HomeScreen({ game }: Props) {
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/35 px-2 py-2 text-center backdrop-blur-sm">
-            <p className="text-[10px] uppercase tracking-wider text-fog">Pil</p>
-            <p className="font-display text-xl text-amber">
-              {game.profile.flightCredits}
-            </p>
+            <p className="text-[10px] uppercase tracking-wider text-fog">Skor</p>
+            <p className="font-display text-xl text-amber">{points}</p>
           </div>
           <button
             type="button"
@@ -163,9 +161,8 @@ export function HomeScreen({ game }: Props) {
         <motion.button
           type="button"
           whileTap={{ scale: 0.98 }}
-          disabled={noCredits}
           onClick={() => void game.startFlight()}
-          className="relative w-full overflow-hidden rounded-2xl py-4 disabled:opacity-40"
+          className="relative w-full overflow-hidden rounded-2xl py-4"
           style={{
             background:
               'linear-gradient(135deg, #1a8f5c 0%, #3dffa8 45%, #7dd3fc 100%)',
@@ -176,15 +173,16 @@ export function HomeScreen({ game }: Props) {
             KALKIŞ
           </span>
           <span className="mt-0.5 block text-xs font-medium text-ink/70">
-            {noCredits
-              ? 'Pil / bakiye yok — Cüzdan'
-              : cryptoOk
-                ? `${craft.name} · ${
-                    game.profile.highRoller
-                      ? formatAsset(stakeAmt, payAsset)
-                      : formatUsd(stakeAmt)
-                  }`
-                : `${craft.name} · 1 pil`}
+            {cryptoOk
+              ? `${craft.name} · ${
+                  game.profile.highRoller
+                    ? formatAsset(stakeAmt, payAsset)
+                    : formatUsd(stakeAmt)
+                }`
+              : game.profile.payWithStars &&
+                  game.profile.starsBalance >= game.starsFlightCost
+                ? `${craft.name} · ${game.starsFlightCost} Stars`
+                : `${craft.name} · ücretsiz`}
           </span>
         </motion.button>
 
@@ -279,25 +277,22 @@ export function HomeScreen({ game }: Props) {
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
-                    disabled={noCredits}
                     onClick={() => void game.startFlight({ challenge: true })}
-                    className="rounded-xl bg-amber/20 py-2 text-[11px] font-semibold text-amber disabled:opacity-40"
+                    className="rounded-xl bg-amber/20 py-2 text-[11px] font-semibold text-amber"
                   >
                     Challenge
                   </button>
                   <button
                     type="button"
-                    disabled={noCredits}
                     onClick={() => void game.startFlight({ blind: true })}
-                    className="rounded-xl bg-ice/20 py-2 text-[11px] font-semibold text-ice disabled:opacity-40"
+                    className="rounded-xl bg-ice/20 py-2 text-[11px] font-semibold text-ice"
                   >
                     Kör
                   </button>
                   <button
                     type="button"
-                    disabled={noCredits}
                     onClick={() => void game.startFlight({ weekly: true })}
-                    className="rounded-xl bg-signal/20 py-2 text-[11px] font-semibold text-signal disabled:opacity-40"
+                    className="rounded-xl bg-signal/20 py-2 text-[11px] font-semibold text-signal"
                   >
                     Lig
                   </button>

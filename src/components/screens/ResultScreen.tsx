@@ -325,15 +325,7 @@ export function ResultScreen({ game }: Props) {
           <button
             type="button"
             onClick={() => {
-              if (
-                game.profile.flightCredits > 0 ||
-                game.profile.payWithCrypto ||
-                game.profile.starsBalance >= game.starsFlightCost
-              ) {
-                game.startFlight()
-              } else {
-                game.goHome()
-              }
+              void game.startFlight()
             }}
             className="col-span-2 rounded-xl py-3.5 text-sm font-semibold text-ink"
             style={{

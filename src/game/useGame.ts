@@ -59,7 +59,7 @@ function pickBluffLed(
   return options[Math.floor(Math.random() * options.length)] ?? null
 }
 import {
-  BOMB_CREDIT_COST,
+  BOMB_POINT_COST,
   applyFlightResult,
   buildLeaderboard,
   buyBomb,
@@ -1044,8 +1044,6 @@ export function useGame() {
       profile.starsBalance >= STARS_FLIGHT_COST
     const useCrypto = !useStars && canStakeCrypto(profile, payAsset, stakeAmt)
 
-    if (!useStars && !useCrypto && profile.flightCredits <= 0) return false
-
     const craftId = profile.selectedCraft
     const skinId = profile.selectedSkin
     // Only attach duel/chat modes when explicitly requested
@@ -1116,10 +1114,7 @@ export function useGame() {
       stakeAssetRef.current = payAsset
       stakeAmountRef.current = stakeAmt
     } else {
-      spent = {
-        ...spent,
-        flightCredits: spent.flightCredits - 1,
-      }
+      // Free flight — pil removed
       stakeAssetRef.current = null
       stakeAmountRef.current = 0
     }
@@ -2088,7 +2083,7 @@ export function useGame() {
     fmtX,
     formatSkyBonus,
     activeCraft,
-    bombCost: BOMB_CREDIT_COST,
+    bombCost: BOMB_POINT_COST,
     previewNextMultiplier,
     displayLed,
   }

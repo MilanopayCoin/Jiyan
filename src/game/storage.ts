@@ -26,9 +26,9 @@ const STORAGE_KEY = 'zincir-drone-profile-v2'
 const LEGACY_KEY = 'zincir-drone-profile-v1'
 
 const DEFAULT_MISSIONS: Omit<DailyMission, 'progress' | 'completed'>[] = [
-  { id: 'flights3', label: '3 uçuş yap', target: 3, rewardFlights: 1 },
-  { id: 'reach5x', label: '5x irtifayı geç', target: 1, rewardFlights: 1, rewardBombs: 1 },
-  { id: 'safe2', label: 'Arka arkaya 2 güvenli iniş', target: 2, rewardFlights: 2 },
+  { id: 'flights3', label: '3 uçuş yap', target: 3, rewardUsdt: 1 },
+  { id: 'reach5x', label: '5x irtifayı geç', target: 1, rewardUsdt: 1, rewardBombs: 1 },
+  { id: 'safe2', label: 'Arka arkaya 2 güvenli iniş', target: 2, rewardUsdt: 2 },
 ]
 
 function freshMissions(): DailyMission[] {
@@ -50,7 +50,7 @@ export function defaultProfile(): PlayerProfile {
     totalCashed: 0,
     streak: 0,
     lastFlightDate: null,
-    flightCredits: 12,
+    flightCredits: 0,
     bombs: 1,
     lastBombGrantDate: todayKey(),
     badges: ['yeni-pilot'],
@@ -279,8 +279,8 @@ export function applyFlightResult(
   }
 
   let missions = profile.missions.map((m) => ({ ...m }))
-  let credits = profile.flightCredits
   let bombs = profile.bombs ?? 0
+  let balances = normalizeBalances(profile.balances)
 
   missions = missions.map((m) => {
     if (m.completed) return m
@@ -296,7 +296,15 @@ export function applyFlightResult(
     const before = profile.missions[i]
     const after = missions[i]
     if (after.completed && !before.completed) {
-      credits += after.rewardFlights
+      const usdt =
+        after.rewardUsdt ??
+        (typeof after.rewardFlights === 'number' ? after.rewardFlights : 0)
+      if (usdt > 0) {
+        balances = {
+          ...balances,
+          usdt: roundAsset(balances.usdt + usdt, 'usdt'),
+        }
+      }
       bombs = Math.min(5, bombs + (after.rewardBombs ?? 0))
       badges.add(`gorev-${after.id}`)
     }
@@ -328,7 +336,6 @@ export function applyFlightResult(
   }
 
   // Boost table cashback on safe landing
-  let balances = normalizeBalances(profile.balances)
   if (result.boostTable && result.outcome === 'cashed') {
     balances = {
       ...balances,
@@ -356,7 +363,7 @@ export function applyFlightResult(
       profile.totalCashed + (result.outcome === 'cashed' ? result.multiplier : 0),
     streak,
     lastFlightDate: today,
-    flightCredits: credits,
+    flightCredits: profile.flightCredits,
     bombs,
     badges: Array.from(badges),
     history: [result, ...profile.history].slice(0, 40),
@@ -370,7 +377,10 @@ export function applyFlightResult(
   return { profile: next, consecutiveSafe: consecutive }
 }
 
-export const BOMB_CREDIT_COST = 3
+/** Points (floor of totalCashed) to buy one signal bomb */
+export const BOMB_POINT_COST = 3
+/** @deprecated use BOMB_POINT_COST — pil removed */
+export const BOMB_CREDIT_COST = BOMB_POINT_COST
 
 export function buyBomb(
   profile: PlayerProfile,
@@ -378,12 +388,13 @@ export function buyBomb(
   if ((profile.bombs ?? 0) >= 5) {
     return { ok: false, reason: 'Bomba stoğu dolu (max 5)' }
   }
-  if (profile.flightCredits < BOMB_CREDIT_COST) {
-    return { ok: false, reason: `${BOMB_CREDIT_COST} pil gerekli` }
+  const pts = scorePoints(profile.totalCashed)
+  if (pts < BOMB_POINT_COST) {
+    return { ok: false, reason: `${BOMB_POINT_COST} puan gerekli (şimdi ${pts})` }
   }
   const next: PlayerProfile = {
     ...profile,
-    flightCredits: profile.flightCredits - BOMB_CREDIT_COST,
+    totalCashed: Math.max(0, profile.totalCashed - BOMB_POINT_COST),
     bombs: (profile.bombs ?? 0) + 1,
   }
   saveProfile(next)
@@ -416,32 +427,20 @@ export function unlockCraft(
   }
 
   if (payWith === 'credits') {
-    if (profile.flightCredits < craft.unlockCredits) {
-      return { ok: false, reason: `En az ${craft.unlockCredits} pil gerekli` }
-    }
-    const next: PlayerProfile = {
-      ...profile,
-      flightCredits: profile.flightCredits - craft.unlockCredits,
-      unlockedCrafts: [...profile.unlockedCrafts, craftId],
-      unlockedSkins: profile.unlockedSkins.includes(craft.defaultSkin)
-        ? profile.unlockedSkins
-        : [...profile.unlockedSkins, craft.defaultSkin],
-      badges: profile.badges.includes(`arac-${craftId}`)
-        ? profile.badges
-        : [...profile.badges, `arac-${craftId}`],
-    }
-    saveProfile(next)
-    return { ok: true, profile: next }
+    // Pil removed — credit path redirects to points using unlockScore or unlockCredits as cost
+    payWith = 'points'
   }
 
   const pts = scorePoints(profile.totalCashed)
-  if (pts < craft.unlockScore) {
-    return { ok: false, reason: `En az ${craft.unlockScore} puan gerekli (şimdi ${pts})` }
+  const pointCost =
+    craft.unlockScore > 0 ? craft.unlockScore : craft.unlockCredits
+  if (pts < pointCost) {
+    return { ok: false, reason: `En az ${pointCost} puan gerekli (şimdi ${pts})` }
   }
-  // Spending points: reduce totalCashed by unlockScore (keeps lifetime feel via badges)
+  // Spending points: reduce totalCashed by cost (keeps lifetime feel via badges)
   const next: PlayerProfile = {
     ...profile,
-    totalCashed: Math.max(0, profile.totalCashed - craft.unlockScore),
+    totalCashed: Math.max(0, profile.totalCashed - pointCost),
     unlockedCrafts: [...profile.unlockedCrafts, craftId],
     unlockedSkins: profile.unlockedSkins.includes(craft.defaultSkin)
       ? profile.unlockedSkins
@@ -487,16 +486,7 @@ export function unlockSkin(
   }
 
   if (payWith === 'credits') {
-    if (profile.flightCredits < skin.unlockCredits) {
-      return { ok: false, reason: `En az ${skin.unlockCredits} pil gerekli` }
-    }
-    const next: PlayerProfile = {
-      ...profile,
-      flightCredits: profile.flightCredits - skin.unlockCredits,
-      unlockedSkins: [...profile.unlockedSkins, skinId],
-    }
-    saveProfile(next)
-    return { ok: true, profile: next }
+    payWith = 'points'
   }
 
   const pts = scorePoints(profile.totalCashed)

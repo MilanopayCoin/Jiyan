@@ -2,6 +2,7 @@
 
 import type { CraftSkinId, PlayerProfile } from './types'
 import { todayKey } from './math'
+import { normalizeBalances, roundAsset } from './assets'
 
 const WEEKLY_KEY = 'zincir-drone-weekly-v1'
 const SEASON_KEY = 'zincir-drone-season-v1'
@@ -31,14 +32,14 @@ export interface PassTier {
   label: string
   fragment?: CraftSkinId
   fragmentCount: number
-  credits?: number
+  usdt?: number
 }
 
 export const PASS_TIERS: PassTier[] = [
   { id: 1, xp: 50, label: 'Fragment I', fragment: 'drone-gold', fragmentCount: 1 },
-  { id: 2, xp: 120, label: '2 pil', fragmentCount: 0, credits: 2 },
+  { id: 2, xp: 120, label: '2 USDT', fragmentCount: 0, usdt: 2 },
   { id: 3, xp: 200, label: 'Fragment II', fragment: 'rocket-night', fragmentCount: 1 },
-  { id: 4, xp: 320, label: '3 pil', fragmentCount: 0, credits: 3 },
+  { id: 4, xp: 320, label: '3 USDT', fragmentCount: 0, usdt: 3 },
   { id: 5, xp: 450, label: 'Altın shard', fragment: 'drone-gold', fragmentCount: 2 },
 ]
 
@@ -163,7 +164,7 @@ export function claimPassTier(profile: PlayerProfile): {
 } {
   let season = loadSeason()
   const claimed: PassTier[] = []
-  let credits = profile.flightCredits
+  let balances = normalizeBalances(profile.balances)
   const fragments = { ...season.fragments }
   const claimedIds = new Set(season.claimed)
 
@@ -172,7 +173,12 @@ export function claimPassTier(profile: PlayerProfile): {
     if (season.xp < tier.xp) continue
     claimedIds.add(tier.id)
     claimed.push(tier)
-    if (tier.credits) credits += tier.credits
+    if (tier.usdt) {
+      balances = {
+        ...balances,
+        usdt: roundAsset(balances.usdt + tier.usdt, 'usdt'),
+      }
+    }
     if (tier.fragment && tier.fragmentCount > 0) {
       fragments[tier.fragment] =
         (fragments[tier.fragment] ?? 0) + tier.fragmentCount
@@ -197,7 +203,7 @@ export function claimPassTier(profile: PlayerProfile): {
   return {
     profile: {
       ...profile,
-      flightCredits: credits,
+      balances,
       unlockedSkins: Array.from(unlocked) as CraftSkinId[],
       badges: unlocked.has('drone-gold') && !profile.badges.includes('sezon-pilot')
         ? [...profile.badges, 'sezon-pilot']

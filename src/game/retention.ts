@@ -4,32 +4,30 @@ import type { PlayerProfile } from './types'
 
 export interface CheckInReward {
   day: number
-  credits: number
   bombs: number
   usdt: number
   label: string
 }
 
-/** 7-day rotating check-in ladder */
+/** 7-day rotating check-in ladder (no pil) */
 export const CHECKIN_REWARDS: CheckInReward[] = [
-  { day: 1, credits: 2, bombs: 0, usdt: 0, label: '2 pil' },
-  { day: 2, credits: 3, bombs: 0, usdt: 1, label: '3 pil + 1 USDT' },
-  { day: 3, credits: 2, bombs: 1, usdt: 0, label: '2 pil + 1 bomba' },
-  { day: 4, credits: 4, bombs: 0, usdt: 2, label: '4 pil + 2 USDT' },
-  { day: 5, credits: 3, bombs: 0, usdt: 3, label: '3 pil + 3 USDT' },
-  { day: 6, credits: 5, bombs: 0, usdt: 5, label: '5 pil + 5 USDT' },
-  { day: 7, credits: 8, bombs: 1, usdt: 10, label: '8 pil + 10 USDT + bomba' },
+  { day: 1, bombs: 0, usdt: 1, label: '1 USDT' },
+  { day: 2, bombs: 0, usdt: 2, label: '2 USDT' },
+  { day: 3, bombs: 1, usdt: 1, label: '1 bomba + 1 USDT' },
+  { day: 4, bombs: 0, usdt: 3, label: '3 USDT' },
+  { day: 5, bombs: 0, usdt: 4, label: '4 USDT' },
+  { day: 6, bombs: 0, usdt: 5, label: '5 USDT' },
+  { day: 7, bombs: 1, usdt: 10, label: '10 USDT + bomba' },
 ]
 
 export const AUTO_CASH_PRESETS = [0, 1.5, 2, 3, 5, 8] as const
 
 export const REFERRAL_JOIN_USDT = 5
-export const REFERRAL_JOIN_CREDITS = 3
 
-export const FRIEND_MILESTONES: { count: number; credits: number; usdt: number }[] = [
-  { count: 1, credits: 2, usdt: 1 },
-  { count: 3, credits: 4, usdt: 3 },
-  { count: 5, credits: 6, usdt: 5 },
+export const FRIEND_MILESTONES: { count: number; usdt: number }[] = [
+  { count: 1, usdt: 2 },
+  { count: 3, usdt: 5 },
+  { count: 5, usdt: 8 },
 ]
 
 export type RetentionResult =
@@ -62,7 +60,7 @@ export function claimCheckIn(profile: PlayerProfile): RetentionResult {
   if (profile.checkInDate === yesterday) {
     streak = profile.checkInStreak + 1
   }
-  const dayIndex = ((streak - 1) % 7)
+  const dayIndex = (streak - 1) % 7
   const reward = CHECKIN_REWARDS[dayIndex]!
   const balances = normalizeBalances(profile.balances)
   if (reward.usdt > 0) {
@@ -74,7 +72,6 @@ export function claimCheckIn(profile: PlayerProfile): RetentionResult {
 
   const next: PlayerProfile = {
     ...profile,
-    flightCredits: profile.flightCredits + reward.credits,
     bombs: Math.min(5, (profile.bombs ?? 0) + reward.bombs),
     balances,
     checkInDate: today,
@@ -106,7 +103,6 @@ export function claimReferralJoin(
 
   const next: PlayerProfile = {
     ...profile,
-    flightCredits: profile.flightCredits + REFERRAL_JOIN_CREDITS,
     balances,
     referredBy: referrerId.slice(0, 24),
     referralClaimed: true,
@@ -115,7 +111,7 @@ export function claimReferralJoin(
   return {
     ok: true,
     profile: next,
-    message: `Davet ödülü: +${REFERRAL_JOIN_CREDITS} pil + ${REFERRAL_JOIN_USDT} USDT`,
+    message: `Davet ödülü: +${REFERRAL_JOIN_USDT} USDT`,
   }
 }
 
@@ -126,7 +122,6 @@ export function claimFriendMilestones(
 ): RetentionResult | null {
   const claimed = new Set(profile.friendMilestonesClaimed ?? [])
   let balances = normalizeBalances(profile.balances)
-  let credits = profile.flightCredits
   let gained = false
   const messages: string[] = []
   const nextClaimed = [...claimed]
@@ -134,13 +129,12 @@ export function claimFriendMilestones(
   for (const m of FRIEND_MILESTONES) {
     if (friendCount < m.count) continue
     if (claimed.has(m.count)) continue
-    credits += m.credits
     balances = {
       ...balances,
       usdt: roundAsset(balances.usdt + m.usdt, 'usdt'),
     }
     nextClaimed.push(m.count)
-    messages.push(`${m.count} arkadaş: +${m.credits} pil + ${m.usdt} USDT`)
+    messages.push(`${m.count} arkadaş: +${m.usdt} USDT`)
     gained = true
   }
 
@@ -154,7 +148,6 @@ export function claimFriendMilestones(
     ok: true,
     profile: {
       ...profile,
-      flightCredits: credits,
       balances,
       friendMilestonesClaimed: nextClaimed.sort((a, b) => a - b),
       badges: Array.from(badges),

@@ -2,8 +2,6 @@ import { useEffect } from 'react'
 import { BackButton, MainButton } from '@twa-dev/sdk/react'
 import type { GameApi } from '../game/useGame'
 import { isTelegramMiniApp } from '../telegram/webApp'
-import { canStakeCrypto } from '../game/walletOps'
-import { ASSETS } from '../game/assets'
 
 interface Props {
   game: GameApi
@@ -24,14 +22,7 @@ export function TelegramChrome({ game }: Props) {
 
   if (!inside) return null
 
-  const { screen, phase, layer, profile } = game
-  const stakeAmt =
-    profile.stakeAmount ||
-    (profile.highRoller ? ASSETS[profile.payAsset].flightStake : 1)
-  const canFly =
-    canStakeCrypto(profile, profile.payAsset, stakeAmt) ||
-    profile.flightCredits > 0
-
+  const { screen, phase, layer } = game
   const showBack = screen !== 'home' && screen !== 'flight'
 
   let mainText = ''
@@ -40,7 +31,7 @@ export function TelegramChrome({ game }: Props) {
 
   if (screen === 'home') {
     mainText = 'UÇUŞA BAŞLA'
-    mainVisible = canFly
+    mainVisible = true
     mainHandler = () => {
       void game.startFlight()
     }
@@ -49,11 +40,10 @@ export function TelegramChrome({ game }: Props) {
     mainVisible = true
     mainHandler = () => game.cashOut()
   } else if (screen === 'result') {
-    mainText = canFly ? 'TEKRAR UÇ' : 'ANA EKRAN'
+    mainText = 'TEKRAR UÇ'
     mainVisible = true
     mainHandler = () => {
-      if (canFly) void game.startFlight()
-      else game.goHome()
+      void game.startFlight()
     }
   }
 

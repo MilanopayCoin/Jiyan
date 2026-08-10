@@ -37,10 +37,6 @@ export function HangarScreen({ game }: Props) {
 
       <div className="mt-4 flex flex-wrap gap-2">
         <div className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-sm">
-          <span className="text-fog">Pil </span>
-          <span className="font-display text-lg text-amber">{profile.flightCredits}</span>
-        </div>
-        <div className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-sm">
           <span className="text-fog">Puan </span>
           <span className="font-display text-lg text-ice">{points}</span>
         </div>
@@ -60,7 +56,7 @@ export function HangarScreen({ game }: Props) {
           onClick={() => game.purchaseBomb()}
           className="mt-2 rounded-xl bg-amber/25 px-3 py-2 text-sm font-medium text-amber"
         >
-          {game.bombCost} pil ile bomba al
+          {game.bombCost} puan ile bomba al
         </button>
       </div>
 
@@ -113,22 +109,16 @@ export function HangarScreen({ game }: Props) {
                     {active ? 'Kullanılıyor' : 'Seç'}
                   </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => game.buyCraft(id, 'credits')}
-                      className="rounded-xl bg-amber/20 px-3 py-2 text-sm font-medium text-amber"
-                    >
-                      {craft.unlockCredits} pil ile aç
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => game.buyCraft(id, 'points')}
-                      className="rounded-xl bg-ice/15 px-3 py-2 text-sm font-medium text-ice"
-                    >
-                      {craft.unlockScore} puan ile aç
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => game.buyCraft(id, 'points')}
+                    className="rounded-xl bg-ice/15 px-3 py-2 text-sm font-medium text-ice"
+                  >
+                    {craft.unlockScore > 0
+                      ? craft.unlockScore
+                      : craft.unlockCredits}{' '}
+                    puan ile aç
+                  </button>
                 )}
               </div>
 
@@ -145,7 +135,7 @@ export function HangarScreen({ game }: Props) {
                           type="button"
                           onClick={() => {
                             if (have) game.selectCraft(id, skin.id)
-                            else game.buySkin(skin.id, 'credits')
+                            else game.buySkin(skin.id, 'points')
                           }}
                           className={`rounded-full border px-3 py-1.5 text-xs ${
                             wearing
@@ -158,10 +148,10 @@ export function HangarScreen({ game }: Props) {
                           {skin.name}
                           {!have && skin.rarity !== 'common'
                             ? skin.requireBestX
-                              ? ` · ${skin.requireBestX}x veya ${skin.unlockCredits} pil`
+                              ? ` · ${skin.requireBestX}x veya ${skin.unlockCredits} puan`
                               : skin.requireStreak
-                                ? ` · seri ${skin.requireStreak} veya ${skin.unlockCredits} pil`
-                                : ` · ${skin.unlockCredits} pil`
+                                ? ` · seri ${skin.requireStreak} veya ${skin.unlockCredits} puan`
+                                : ` · ${skin.unlockCredits} puan`
                             : ''}
                           {skin.rarity === 'legendary' ? ' ★' : skin.rarity === 'rare' ? ' ◆' : ''}
                         </button>

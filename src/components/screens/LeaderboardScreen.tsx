@@ -41,7 +41,7 @@ export function LeaderboardScreen({ game }: Props) {
     void sfx.unlock()
     const card = profileToCard(game.profile)
     const url = friendInviteUrl(card)
-    const text = `Zincir: Drone — beni arkadaş olarak ekle! Linkle giren +5 USDT + 3 pil alır.\n${url}`
+    const text = `Zincir: Drone — beni arkadaş olarak ekle! Linkle giren +5 USDT alır.\n${url}`
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Zincir: Drone', text, url })
@@ -122,7 +122,7 @@ export function LeaderboardScreen({ game }: Props) {
       {tab === 'friends' && (
         <div className="mt-4 space-y-2 rounded-2xl border border-white/10 bg-panel p-3 backdrop-blur-md">
           <p className="text-xs text-fog">
-            Davet linkiyle gelen +5 USDT + 3 pil alır. Sen 1 / 3 / 5 arkadaşta
+            Davet linkiyle gelen +5 USDT alır. Sen 1 / 3 / 5 arkadaşta
             ekstra ödül kazanırsın.
           </p>
           <div className="flex gap-2">

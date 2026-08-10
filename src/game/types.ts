@@ -99,7 +99,9 @@ export interface DailyMission {
   label: string
   target: number
   progress: number
-  rewardFlights: number
+  /** @deprecated pil removed — kept for saved profiles */
+  rewardFlights?: number
+  rewardUsdt?: number
   rewardBombs?: number
   completed: boolean
 }
@@ -132,7 +134,7 @@ export interface PlayerProfile {
   balances: import('./assets').AssetBalances
   /** Asset used to stake flights */
   payAsset: import('./assets').AssetId
-  /** Prefer crypto stake over free pil when possible */
+  /** Prefer crypto stake over free flight when possible */
   payWithCrypto: boolean
   /** Selected stake amount in payAsset units */
   stakeAmount: number
@@ -153,7 +155,7 @@ export interface PlayerProfile {
   friendMilestonesClaimed: number[]
   /** Telegram Stars balance (local + invoice top-ups) */
   starsBalance: number
-  /** Prefer Stars stake over pil/crypto when enough */
+  /** Prefer Stars stake over free/crypto when enough */
   payWithStars: boolean
   /** Welcome Stars claimed inside Mini App */
   starsWelcomeClaimed: boolean

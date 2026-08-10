@@ -130,8 +130,8 @@ export function formatPayoutUsdc(result: FlightResult): string {
 export function receiptLine(result: FlightResult): string {
   if (!result.stakeAsset || result.stakeAmount == null) {
     return result.outcome === 'cashed'
-      ? `İniş ${result.multiplier.toFixed(2)}x · pil`
-      : `Çöküş · pil`
+      ? `İniş ${result.multiplier.toFixed(2)}x · ücretsiz`
+      : `Çöküş · ücretsiz`
   }
   return result.outcome === 'cashed'
     ? `${formatPayoutUsdc(result)} @ ${result.multiplier.toFixed(2)}x`

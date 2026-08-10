@@ -66,8 +66,8 @@ describe('layer math', () => {
 })
 
 describe('flight result persistence', () => {
-  it('does not double-spend credits (spent on takeoff)', () => {
-    const profile = { ...defaultProfile(), flightCredits: 11 }
+  it('records flight without spending pil', () => {
+    const profile = { ...defaultProfile(), flightCredits: 0, totalCashed: 4 }
     const result: FlightResult = {
       outcome: 'cashed',
       layer: 2,
@@ -78,30 +78,30 @@ describe('flight result persistence', () => {
       skinId: 'drone-default',
     }
     const { profile: next } = applyFlightResult(profile, result, 0)
-    expect(next.flightCredits).toBe(11)
+    expect(next.flightCredits).toBe(0)
     expect(next.flights).toBe(1)
-    expect(next.totalCashed).toBe(1.5)
+    expect(next.totalCashed).toBe(5.5)
   })
 
-  it('unlocks balloon with credits', () => {
-    const profile = { ...defaultProfile(), flightCredits: 10 }
-    const res = unlockCraft(profile, 'balloon', 'credits')
+  it('unlocks balloon with points', () => {
+    const profile = { ...defaultProfile(), totalCashed: 20 }
+    const res = unlockCraft(profile, 'balloon', 'points')
     expect(res.ok).toBe(true)
     if (res.ok) {
       expect(res.profile.unlockedCrafts).toContain('balloon')
-      expect(res.profile.flightCredits).toBe(5)
+      expect(res.profile.totalCashed).toBeLessThan(20)
     }
   })
 })
 
 describe('signal bomb', () => {
-  it('buyBomb spends credits and adds inventory', () => {
-    const profile = { ...defaultProfile(), flightCredits: 6, bombs: 1 }
+  it('buyBomb spends points and adds inventory', () => {
+    const profile = { ...defaultProfile(), totalCashed: 10, bombs: 1 }
     const res = buyBomb(profile)
     expect(res.ok).toBe(true)
     if (res.ok) {
       expect(res.profile.bombs).toBe(2)
-      expect(res.profile.flightCredits).toBe(3)
+      expect(res.profile.totalCashed).toBe(7)
     }
   })
 
