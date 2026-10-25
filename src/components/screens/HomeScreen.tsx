@@ -186,6 +186,19 @@ export function HomeScreen({ game }: Props) {
           </span>
         </motion.button>
 
+        <button
+          type="button"
+          onClick={() => game.setScreen('kader')}
+          className="mt-2 w-full rounded-2xl border border-amber/35 bg-amber/10 py-3 text-center"
+        >
+          <span className="font-display text-xl tracking-wide text-amber">
+            KADER
+          </span>
+          <span className="mt-0.5 block text-[11px] text-fog">
+            Makara · ücretsiz demo
+          </span>
+        </button>
+
         <div className="mt-2 flex gap-2">
           <button
             type="button"

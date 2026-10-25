@@ -104,7 +104,7 @@ const ITEMS: {
 ]
 
 export function BottomNav({ screen, onNavigate }: Props) {
-  if (screen === 'flight' || screen === 'result') return null
+  if (screen === 'flight' || screen === 'result' || screen === 'kader') return null
 
   const tgPad = isTelegramMiniApp()
 

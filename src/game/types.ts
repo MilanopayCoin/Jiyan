@@ -6,6 +6,7 @@ export type Screen =
   | 'profile'
   | 'hangar'
   | 'wallet'
+  | 'kader'
 
 export type FlightPhase = 'idle' | 'climbing' | 'landing' | 'crashing' | 'done'
 

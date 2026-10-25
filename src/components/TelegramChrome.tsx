@@ -23,7 +23,8 @@ export function TelegramChrome({ game }: Props) {
   if (!inside) return null
 
   const { screen, phase, layer } = game
-  const showBack = screen !== 'home' && screen !== 'flight'
+  const showBack =
+    screen !== 'home' && screen !== 'flight' && screen !== 'kader'
 
   let mainText = ''
   let mainVisible = false
@@ -46,6 +47,7 @@ export function TelegramChrome({ game }: Props) {
       void game.startFlight()
     }
   }
+  // kader: custom UI — no MainButton
 
   return (
     <>
